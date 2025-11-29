@@ -1,196 +1,124 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
-from azure.servicebus.aio import ServiceBusClient as AsyncServiceBusClient
+"""
+Azure Service Bus Dynamic Chatrooms - Cost-Optimal Implementation
+
+ARCHITECTURE OVERVIEW:
+======================
+This implementation uses a SINGLE Azure Service Bus subscription with backend routing
+to achieve cost-optimal scaling. This avoids the cost disaster of creating one 
+subscription per room, which would result in (messages × rooms) operations.
+
+COST MODEL:
+===========
+- Current: 2 operations per message (1 publish + 1 delivery to single subscription)
+- Alternative (per-room subs): (1 + N) operations per message, where N = number of rooms
+- Example: 100K messages/day, 1000 rooms
+  * Current: 200K ops/day = 6M/month = $0 (free tier)
+  * Alternative: 100M ops/day = 3B/month = $149/month ❌
+
+MESSAGE FLOW:
+=============
+1. User sends message to "Product Team" room
+2. Frontend: POST /publish with room_id="uuid-123"
+3. Backend: Publishes to Service Bus topic (1 operation)
+4. Service Bus: Delivers to single subscription (1 operation)
+5. Backend listener: Receives message, reads room_id
+6. Backend: Broadcasts ONLY to WebSockets subscribed to room_id="uuid-123"
+7. Users in other rooms: Never receive the message ✓
+
+KEY FEATURES:
+=============
+- Dynamic room creation by users
+- Room persistence (survives restarts via rooms.json)
+- Real-time WebSocket messaging
+- Perfect room isolation
+- Cost monitoring via /metrics endpoint
+- Scalable to 10K concurrent users (single instance)
+
+SCALING PATH:
+=============
+- 0-10K users: Current implementation (cost: $0-5/month)
+- 10K-100K users: Migrate to Redis Pub/Sub (cost: $46/month fixed)
+- 100K+ users: Migrate to Azure SignalR (cost: $489/month)
+
+See COST_ANALYSIS.md for complete cost breakdown and migration guides.
+
+Author: Alkis
+Version: 2.0 - Cost-Optimal Dynamic Chatrooms
+"""
+# backend/main.py
+
+from __future__ import annotations
+
 import asyncio
-import json
-import os
-from typing import Set
-import threading
 
-app = FastAPI()
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# CORS configuration
+from core.logging import setup_logging, get_logger
+from services.service_bus import listen_to_service_bus
+from api.routes import root, health, metrics, rooms, publish
+from api import websocket as websocket_module
+
+# Configure logging first
+setup_logging()
+logger = get_logger(__name__)
+
+# FastAPI app
+app = FastAPI(title="Azure Dynamic Chatrooms - Cost Optimal")
+
+# CORS (relaxed for now – tighten in prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=["*"],  # TODO: Restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Azure Service Bus configuration
-CONNECTION_STRING = os.getenv("AZURE_SERVICEBUS_CONNECTION_STRING", "")
-TOPIC_NAME = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "messages")
-SUBSCRIPTION_NAME = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
+# REST routes
+app.include_router(root.router)
+app.include_router(health.router)
+app.include_router(metrics.router)
+app.include_router(rooms.router)
+app.include_router(publish.router)
 
-print("========================== VARIABLES ==========================")
-print(f"Connection String: {'*' * 20 if CONNECTION_STRING else 'NOT SET'}")
-print(f"Topic Name: {TOPIC_NAME}")
-print(f"Subscription Name: {SUBSCRIPTION_NAME}")
-print("==============================================================")
+# WebSocket routes
+app.include_router(websocket_module.router)
 
-# WebSocket connection manager
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.add(websocket)
-        print(f"Client connected. Total connections: {len(self.active_connections)}")
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.discard(websocket)
-        print(f"Client disconnected. Total connections: {len(self.active_connections)}")
-
-    async def broadcast(self, message: dict):
-        disconnected = set()
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                print(f"Error sending to client: {e}")
-                disconnected.add(connection)
-        
-        # Clean up disconnected clients
-        for conn in disconnected:
-            self.disconnect(conn)
-
-manager = ConnectionManager()
-
-# Background task to listen to Service Bus messages
-async def listen_to_service_bus():
-    """Listen to Service Bus topic and broadcast to WebSocket clients"""
-    if not CONNECTION_STRING:
-        print("Service Bus connection string not configured. Skipping listener.")
-        return
-    
-    print("Starting Service Bus listener...")
-    
-    try:
-        async with AsyncServiceBusClient.from_connection_string(CONNECTION_STRING) as client:
-            receiver = client.get_subscription_receiver(
-                topic_name=TOPIC_NAME,
-                subscription_name=SUBSCRIPTION_NAME,
-                max_wait_time=5
-            )
-            
-            async with receiver:
-                print(f"Listening to Service Bus topic '{TOPIC_NAME}', subscription '{SUBSCRIPTION_NAME}'")
-                while True:
-                    try:
-                        messages = await receiver.receive_messages(max_message_count=10, max_wait_time=5)
-                        for msg in messages:
-                            try:
-                                message_body = str(msg)
-                                print(f"Received from Service Bus: {message_body}")
-                                
-                                # Parse message
-                                try:
-                                    data = json.loads(message_body)
-                                except:
-                                    data = {"content": message_body}
-                                
-                                # Broadcast to WebSocket clients
-                                response = {
-                                    "type": "service_bus_message",
-                                    "data": f"Message from Service Bus: {data.get('content', message_body)}",
-                                    "timestamp": data.get('timestamp', ''),
-                                    "original": data
-                                }
-                                await manager.broadcast(response)
-                                
-                                # Complete the message
-                                await receiver.complete_message(msg)
-                            except Exception as e:
-                                print(f"Error processing message: {e}")
-                                await receiver.abandon_message(msg)
-                    except Exception as e:
-                        print(f"Error receiving messages: {e}")
-                        await asyncio.sleep(1)
-    except Exception as e:
-        print(f"Service Bus listener error: {e}")
 
 @app.on_event("startup")
 async def startup_event():
-    """Start background tasks on application startup"""
-    if CONNECTION_STRING:
-        # Start Service Bus listener in background
-        asyncio.create_task(listen_to_service_bus())
-        print("Service Bus listener task started")
-    else:
-        print("Warning: Service Bus connection string not configured")
+    logger.info("🚀 Application starting - Dynamic Chatrooms enabled")
+    # Start Service Bus listener in the background
+    asyncio.create_task(listen_to_service_bus())
 
-@app.get("/")
-async def root():
-    return {"message": "Azure Service Bus Backend is running"}
-
-@app.get("/health")
-async def health():
-    return {
-        "status": "healthy",
-        "service_bus_configured": bool(CONNECTION_STRING),
-        "active_websocket_connections": len(manager.active_connections)
-    }
-
-@app.post("/publish")
-async def publish_message(message: dict):
-    """Publish a message to Azure Service Bus Topic"""
-    if not CONNECTION_STRING:
-        return {"error": "Azure Service Bus connection string not configured"}
-    
-    try:
-        # Send to Service Bus Topic
-        with ServiceBusClient.from_connection_string(CONNECTION_STRING) as client:
-            sender = client.get_topic_sender(topic_name=TOPIC_NAME)
-            with sender:
-                # Create message
-                service_bus_message = ServiceBusMessage(
-                    json.dumps(message),
-                    content_type="application/json"
-                )
-                sender.send_messages(service_bus_message)
-                print(f"Message sent to Service Bus: {message}")
-        
-        # Also send immediate response to WebSocket clients
-        response_message = {
-            "type": "publish_confirmation",
-            "data": f"Message published to Service Bus: {message.get('content', 'N/A')}",
-            "timestamp": message.get('timestamp', '')
-        }
-        await manager.broadcast(response_message)
-        
-        return {"status": "success", "message": "Message published to Service Bus"}
-    except Exception as e:
-        print(f"Error publishing message: {e}")
-        return {"error": str(e)}
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time communication"""
-    await manager.connect(websocket)
-    try:
-        while True:
-            # Keep the connection alive and listen for messages from client
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            # Echo back or process the message
-            response = {
-                "type": "echo",
-                "data": f"Server received: {message.get('content', 'N/A')}",
-                "timestamp": message.get('timestamp', '')
-            }
-            await manager.broadcast(response)
-            
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        print("Client disconnected")
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        manager.disconnect(websocket)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+
+# ============================================================================
+# END OF FILE
+# ============================================================================
+"""
+SUMMARY:
+========
+This implementation achieves cost optimization by using a SINGLE Azure Service
+Bus subscription instead of creating one subscription per room. Messages are
+routed in the backend based on room_id, which costs 2 operations per message
+regardless of room count.
+
+For detailed cost analysis and scaling strategies, see:
+- COST_ANALYSIS.md (complete cost breakdown)
+- DEPLOYMENT_READY.md (deployment guide)
+- DYNAMIC_CHATROOMS_GUIDE.md (technical reference)
+
+To deploy:
+    git add backend/main.py backend/requirements.txt
+    git commit -m "Deploy cost-optimal dynamic chatrooms"
+    git push
+
+Author: Alkis
+Version: 2.0 - Cost-Optimal Dynamic Chatrooms
+Last Updated: 2025-12-01
+"""
