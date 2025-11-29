@@ -1,0 +1,53 @@
+name: Deploy Frontend to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+  AZURE_WEBAPP_NAME: simple-frontend-unlr
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Build application
+      working-directory: frontend
+      run: npm run build
+      env:
+        CI: false
+        REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
+        REACT_APP_WS_URL: ${{ secrets.REACT_APP_WS_URL }}
+        REACT_APP_APIM_SUBSCRIPTION_KEY: ${{ secrets.REACT_APP_APIM_SUBSCRIPTION_KEY }}
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
+        package: frontend/build
+
+    - name: Deployment summary
+      run: |
+        echo "✅ Frontend deployed successfully to https://simple-frontend-unlr-g9h4bcgkdtfffxd2.westeurope-01.azurewebsites.net"
