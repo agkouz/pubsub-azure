@@ -44,7 +44,8 @@ jobs:
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
-        package: frontend/build
+        package: frontend
+        startup-command: 'npm run serve'
 
     - name: Deployment summary
       run: |
