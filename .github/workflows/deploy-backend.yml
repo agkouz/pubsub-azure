@@ -3,14 +3,14 @@ name: Deploy Backend to Azure App Service
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.13'
+  PYTHON_VERSION: '3.11'
   AZURE_WEBAPP_NAME: simple-backend-unlr
 
 jobs:
@@ -26,34 +26,12 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Create and activate virtual environment
-      working-directory: backend
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-
-    - name: Install dependencies
-      working-directory: backend
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Create deployment package
-      working-directory: backend
-      run: |
-        # Create a clean deployment package
-        mkdir -p deployment
-        cp -r *.py requirements.txt deployment/
-        cd deployment
-        zip -r ../deployment.zip .
-        cd ..
-
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ env.AZURE_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
-        package: backend/deployment.zip
+        package: backend
 
     - name: Deployment summary
       run: |
