@@ -21,32 +21,70 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Log - Start deployment
+      run: |
+        echo "=================================================="
+        echo "🚀 Starting Backend Deployment"
+        echo "=================================================="
+        echo "Python Version: ${{ env.PYTHON_VERSION }}"
+        echo "Target App: ${{ env.AZURE_WEBAPP_NAME }}"
+        echo "Triggered by: ${{ github.event_name }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "=================================================="
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
+    - name: Log - Python setup complete
+      run: |
+        echo "✅ Python setup complete"
+        python --version
+        pip --version
+
     - name: Create and activate virtual environment
       working-directory: backend
       run: |
+        echo "📦 Creating virtual environment..."
         python -m venv venv
         source venv/bin/activate
+        echo "✅ Virtual environment created"
 
     - name: Install dependencies
       working-directory: backend
       run: |
+        echo "📥 Installing dependencies..."
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        echo "✅ Dependencies installed"
+        echo "Installed packages:"
+        pip list
+
+    - name: Log - Files to be deployed
+      working-directory: backend
+      run: |
+        echo "=================================================="
+        echo "📁 Files in backend directory:"
+        ls -lah
+        echo "=================================================="
 
     - name: Create deployment package
       working-directory: backend
       run: |
+        echo "📦 Creating deployment package..."
         # Create a clean deployment package
         mkdir -p deployment
         cp -r *.py requirements.txt deployment/
         cd deployment
+        echo "Files in deployment package:"
+        ls -lah
         zip -r ../deployment.zip .
         cd ..
+        echo "✅ Deployment package created"
+        echo "Package size:"
+        ls -lh deployment.zip
 
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
@@ -57,4 +95,19 @@ jobs:
 
     - name: Deployment summary
       run: |
-        echo "✅ Backend deployed successfully to https://simple-backend-unlr-bse7b2cudad6h7gs.westeurope-01.azurewebsites.net"
+        echo "=================================================="
+        echo "✅ Backend deployed successfully!"
+        echo "=================================================="
+        echo "🌐 URL: https://simple-backend-unlr-bse7b2cudad6h7gs.westeurope-01.azurewebsites.net"
+        echo "📊 Health check: https://simple-backend-unlr-bse7b2cudad6h7gs.westeurope-01.azurewebsites.net/health"
+        echo "=================================================="
+        echo "⏰ Deployment completed at: $(date)"
+        echo "=================================================="
+
+    - name: Verify deployment (optional)
+      continue-on-error: true
+      run: |
+        echo "🔍 Waiting 10 seconds for app to start..."
+        sleep 10
+        echo "Testing health endpoint..."
+        curl -f https://simple-backend-unlr-bse7b2cudad6h7gs.westeurope-01.azurewebsites.net/health || echo "⚠️ Health check failed (app may still be starting)"
