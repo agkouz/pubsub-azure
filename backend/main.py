@@ -2,6 +2,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 from azure.servicebus.aio import ServiceBusClient as AsyncServiceBusClient
+from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 import asyncio
 import json
 import os
@@ -29,18 +31,28 @@ app.add_middleware(
 )
 
 # Azure Service Bus configuration
+# Use connection string OR Azure AD authentication
 CONNECTION_STRING = os.getenv("AZURE_SERVICEBUS_CONNECTION_STRING", "")
+NAMESPACE_FQDN = os.getenv("AZURE_SERVICEBUS_NAMESPACE_FQDN", "")  # e.g., "simple-pubsub-unlr.servicebus.windows.net"
 TOPIC_NAME = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "messages")
 SUBSCRIPTION_NAME = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
+
+# Determine authentication method
+USE_AZURE_AD = bool(NAMESPACE_FQDN and not CONNECTION_STRING)
 
 logger.info("=" * 60)
 logger.info("AZURE SERVICE BUS CONFIGURATION")
 logger.info("=" * 60)
-logger.info(f"Connection String Configured: {'YES' if CONNECTION_STRING else 'NO'}")
-if CONNECTION_STRING:
-    # Log only the endpoint, not the key
-    endpoint = CONNECTION_STRING.split(';')[0].replace('Endpoint=', '')
-    logger.info(f"Service Bus Endpoint: {endpoint}")
+if USE_AZURE_AD:
+    logger.info("Authentication Method: Azure AD (Managed Identity)")
+    logger.info(f"Service Bus Namespace FQDN: {NAMESPACE_FQDN}")
+else:
+    logger.info("Authentication Method: Connection String")
+    if CONNECTION_STRING:
+        endpoint = CONNECTION_STRING.split(';')[0].replace('Endpoint=', '')
+        logger.info(f"Service Bus Endpoint: {endpoint}")
+    else:
+        logger.warning("No authentication configured!")
 logger.info(f"Topic Name: {TOPIC_NAME}")
 logger.info(f"Subscription Name: {SUBSCRIPTION_NAME}")
 logger.info("=" * 60)
@@ -78,14 +90,26 @@ manager = ConnectionManager()
 # Background task to listen to Service Bus messages
 async def listen_to_service_bus():
     """Listen to Service Bus topic and broadcast to WebSocket clients"""
-    if not CONNECTION_STRING:
-        logger.warning("Service Bus connection string not configured. Skipping listener.")
+    if not CONNECTION_STRING and not NAMESPACE_FQDN:
+        logger.warning("Service Bus not configured. Skipping listener.")
         return
     
     logger.info("Starting Service Bus listener...")
     
     try:
-        async with AsyncServiceBusClient.from_connection_string(CONNECTION_STRING) as client:
+        # Create client based on authentication method
+        if USE_AZURE_AD:
+            logger.info("Using Azure AD authentication (Managed Identity)")
+            credential = AsyncDefaultAzureCredential()
+            client = AsyncServiceBusClient(
+                fully_qualified_namespace=NAMESPACE_FQDN,
+                credential=credential
+            )
+        else:
+            logger.info("Using connection string authentication")
+            client = AsyncServiceBusClient.from_connection_string(CONNECTION_STRING)
+        
+        async with client:
             receiver = client.get_subscription_receiver(
                 topic_name=TOPIC_NAME,
                 subscription_name=SUBSCRIPTION_NAME,
@@ -140,12 +164,12 @@ async def listen_to_service_bus():
 async def startup_event():
     """Start background tasks on application startup"""
     logger.info("Application startup initiated")
-    if CONNECTION_STRING:
+    if CONNECTION_STRING or NAMESPACE_FQDN:
         # Start Service Bus listener in background
         asyncio.create_task(listen_to_service_bus())
         logger.info("✓ Service Bus listener task started")
     else:
-        logger.warning("⚠ Service Bus connection string not configured - listener not started")
+        logger.warning("⚠ Service Bus not configured - listener not started")
 
 @app.get("/")
 async def root():
@@ -155,7 +179,8 @@ async def root():
 async def health():
     return {
         "status": "healthy",
-        "service_bus_configured": bool(CONNECTION_STRING),
+        "service_bus_configured": bool(CONNECTION_STRING or NAMESPACE_FQDN),
+        "authentication_method": "Azure AD" if USE_AZURE_AD else "Connection String",
         "active_websocket_connections": len(manager.active_connections)
     }
 
@@ -164,15 +189,27 @@ async def publish_message(message: dict):
     """Publish a message to Azure Service Bus Topic"""
     logger.info(f"Publish request received: {message}")
     
-    if not CONNECTION_STRING:
-        logger.error("Publish failed: Azure Service Bus connection string not configured")
-        return {"error": "Azure Service Bus connection string not configured"}
+    if not CONNECTION_STRING and not NAMESPACE_FQDN:
+        logger.error("Publish failed: Azure Service Bus not configured")
+        return {"error": "Azure Service Bus not configured"}
     
     try:
         logger.info(f"Publishing to topic '{TOPIC_NAME}'...")
         
+        # Create client based on authentication method
+        if USE_AZURE_AD:
+            logger.info("Using Azure AD for publish")
+            credential = DefaultAzureCredential()
+            client = ServiceBusClient(
+                fully_qualified_namespace=NAMESPACE_FQDN,
+                credential=credential
+            )
+        else:
+            logger.info("Using connection string for publish")
+            client = ServiceBusClient.from_connection_string(CONNECTION_STRING)
+        
         # Send to Service Bus Topic
-        with ServiceBusClient.from_connection_string(CONNECTION_STRING) as client:
+        with client:
             sender = client.get_topic_sender(topic_name=TOPIC_NAME)
             with sender:
                 # Create message
