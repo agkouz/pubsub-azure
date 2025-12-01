@@ -643,11 +643,11 @@ async def listen_to_service_bus():
     if not CONNECTION_STRING and not NAMESPACE_FQDN:
         logger.warning("Service Bus not configured - messages won't be received")
         return
-    
+
     logger.info("🚀 Starting Service Bus listener...")
 
     try:
-        # Create Service Bus client (async version for background tasks)
+        # Create async Service Bus client with Managed Identity or connection string
         if USE_AZURE_AD:
             credential = AsyncDefaultAzureCredential()
             client = AsyncServiceBusClient(
@@ -656,12 +656,12 @@ async def listen_to_service_bus():
             )
         else:
             client = AsyncServiceBusClient.from_connection_string(CONNECTION_STRING)
-        
+
         async with client:
             receiver = client.get_subscription_receiver(
                 topic_name=TOPIC_NAME,
                 subscription_name=SUBSCRIPTION_NAME,
-                max_wait_time=5
+                max_wait_time=5,  # wait up to 5s for new messages
             )
 
             async with receiver:
@@ -670,54 +670,54 @@ async def listen_to_service_bus():
                     f"subscription='{SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
                 )
 
-                async for msg in receiver:
+                while True:
                     try:
-                        # ✅ Correctly decode the message body to JSON
-                        body_bytes = b"".join(msg.body)
-                        message_body = body_bytes.decode("utf-8")
+                        # Pull up to 10 messages at a time
+                        messages = await receiver.receive_messages(
+                            max_message_count=10,
+                            max_wait_time=5
+                        )
 
-                        logger.info(f"📥 Received raw message body: {message_body}")
+                        if not messages:
+                            # No messages this cycle, just loop again
+                            continue
 
-                        message_data = json.loads(message_body)
+                        for msg in messages:
+                            try:
+                                # Decode body
+                                body_bytes = b"".join(msg.body)
+                                message_body = body_bytes.decode("utf-8")
+                                logger.info(f"📥 Received raw message body: {message_body}")
 
-                        room_id = message_data.get("room_id")
+                                message_data = json.loads(message_body)
+                                room_id = message_data.get("room_id")
 
-                        if room_id:
-                            logger.info(
-                                f"➡ Routing message to room_id={room_id}, "
-                                f"content={message_data.get('content')!r}, "
-                                f"sender={message_data.get('sender')!r}"
-                            )
+                                if room_id:
+                                    logger.info(
+                                        f"➡ Routing message to room_id={room_id}, "
+                                        f"content={message_data.get('content')!r}, "
+                                        f"sender={message_data.get('sender')!r}"
+                                    )
+                                    await manager.broadcast_to_room(room_id, message_data)
+                                else:
+                                    logger.warning("Message without room_id - ignoring")
 
-                            await manager.broadcast_to_room(room_id, message_data)
+                                await receiver.complete_message(msg)
+                            except Exception as e:
+                                logger.error(f"Error processing individual message: {e}")
+                                logger.error(traceback.format_exc())
+                                # Complete to avoid poison loops
+                                await receiver.complete_message(msg)
 
-                            # (Optional) If you prefer to count *received* messages:
-                            # global message_counter
-                            # message_counter += 1
-                        else:
-                            logger.warning("Message without room_id - ignoring")
-
-                        # Mark message as processed
-                        logger.info(f'Waiting for receiver.complete_message')
-                        await receiver.complete_message(msg)
-                        logger.info(f'Message processed correctly')
-
-                    except json.JSONDecodeError as e:
-                        logger.error(f"JSON decode error: {e}")
-                        logger.error(f"Offending message: {msg}")
-                        await receiver.complete_message(msg)
                     except Exception as e:
-                        logger.error(f"Error processing message: {e}")
+                        logger.error(f"Service Bus receive loop error: {e}")
                         logger.error(traceback.format_exc())
-                        # Complete anyway to avoid poison message loops
-                        await receiver.complete_message(msg)
+                        # Brief backoff on error
+                        await asyncio.sleep(5)
 
     except Exception as e:
-        logger.error(f"Service Bus listener error (top-level): {e}")
+        logger.error(f"Service Bus listener error (outer): {e}")
         logger.error(traceback.format_exc())
-        # Simple backoff + restart
-        await asyncio.sleep(5)
-        asyncio.create_task(listen_to_service_bus())
 # ============================================================================
 # APPLICATION LIFECYCLE EVENTS
 # ============================================================================
