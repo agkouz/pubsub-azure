@@ -645,7 +645,7 @@ async def listen_to_service_bus():
         return
     
     logger.info("🚀 Starting Service Bus listener...")
-    
+
     try:
         # Create Service Bus client (async version for background tasks)
         if USE_AZURE_AD:
@@ -658,51 +658,64 @@ async def listen_to_service_bus():
             client = AsyncServiceBusClient.from_connection_string(CONNECTION_STRING)
         
         async with client:
-            # Get receiver for our SINGLE subscription
-            # This is the cost optimization - only ONE subscription!
             receiver = client.get_subscription_receiver(
                 topic_name=TOPIC_NAME,
                 subscription_name=SUBSCRIPTION_NAME,
-                max_wait_time=5  # Poll every 5 seconds if no messages
+                max_wait_time=5
             )
-            
+
             async with receiver:
-                logger.info(f"✓ Listening to Service Bus (1 subscription, cost-optimal)")
-                
-                # Infinite loop - keep listening for messages
+                logger.info(
+                    f"✓ Listening to Service Bus topic='{TOPIC_NAME}', "
+                    f"subscription='{SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
+                )
+
                 async for msg in receiver:
                     try:
-                        # Parse message body
-                        message_body = str(msg)
+                        # ✅ Correctly decode the message body to JSON
+                        body_bytes = b"".join(msg.body)
+                        message_body = body_bytes.decode("utf-8")
+
+                        logger.info(f"📥 Received raw message body: {message_body}")
+
                         message_data = json.loads(message_body)
-                        
-                        # Extract room_id (this is how we know where to route)
+
                         room_id = message_data.get("room_id")
-                        
+
                         if room_id:
-                            # THIS IS THE KEY: Broadcast only to subscribed WebSockets
-                            # No Service Bus filtering needed - we do it in memory!
+                            logger.info(
+                                f"➡ Routing message to room_id={room_id}, "
+                                f"content={message_data.get('content')!r}, "
+                                f"sender={message_data.get('sender')!r}"
+                            )
+
                             await manager.broadcast_to_room(room_id, message_data)
+
+                            # (Optional) If you prefer to count *received* messages:
+                            # global message_counter
+                            # message_counter += 1
                         else:
                             logger.warning("Message without room_id - ignoring")
-                        
-                        # Mark message as processed (removes from queue)
+
+                        # Mark message as processed
                         await receiver.complete_message(msg)
-                        
+
+                    except json.JSONDecodeError as e:
+                        logger.error(f"JSON decode error: {e}")
+                        logger.error(f"Offending message: {msg}")
+                        await receiver.complete_message(msg)
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
                         logger.error(traceback.format_exc())
-                        # Complete anyway to avoid infinite redelivery
+                        # Complete anyway to avoid poison message loops
                         await receiver.complete_message(msg)
-                        
-    except Exception as e:
-        logger.error(f"Service Bus listener error: {e}")
-        logger.error(traceback.format_exc())
-        # Wait before retrying
-        await asyncio.sleep(5)
-        # Restart listener
-        asyncio.create_task(listen_to_service_bus())
 
+    except Exception as e:
+        logger.error(f"Service Bus listener error (top-level): {e}")
+        logger.error(traceback.format_exc())
+        # Simple backoff + restart
+        await asyncio.sleep(5)
+        asyncio.create_task(listen_to_service_bus())
 # ============================================================================
 # APPLICATION LIFECYCLE EVENTS
 # ============================================================================

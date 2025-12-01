@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-const BACKEND_URL = 'https://simple-inrm-gateway.azure-api.net';
-const WS_URL = 'wss://simple-inrm-gateway.azure-api.net/ws';
-const SUBSCRIPTION_KEY = 'ce29f89ec98d420aaf17b2d49dcbef40';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
+const SUBSCRIPTION_KEY = process.env.REACT_APP_APIM_SUBSCRIPTION_KEY || '';
 
 function App() {
   const [messages, setMessages] = useState([]);
