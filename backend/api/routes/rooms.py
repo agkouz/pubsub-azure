@@ -1,13 +1,13 @@
-# app/api/routes/rooms.py
+# backend/api/routes/rooms.py
 
 from typing import List
 
 from fastapi import APIRouter, HTTPException
 import asyncio
 
-from app.models.room import Room, CreateRoomRequest
-from app.core import state
-from app.api.utils import broadcast_room_list_update
+from backend.models.room import Room, CreateRoomRequest
+from backend.core import state
+from backend.api.utils import broadcast_room_list_update
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ router = APIRouter()
 # ROOM CRUD ENDPOINTS
 # ============================================================================
 
-@app.get("/rooms", response_model=List[Room])
+@router.get("/rooms", response_model=List[Room])
 async def list_rooms():
     """
     List all available rooms.
@@ -34,7 +34,7 @@ async def list_rooms():
 
     return rooms
 
-@app.post("/rooms", response_model=Room)
+@router.post("/rooms", response_model=Room)
 async def create_room(request: CreateRoomRequest):
     """
     Create a new chatroom.
@@ -71,7 +71,7 @@ async def create_room(request: CreateRoomRequest):
     asyncio.create_task(broadcast_room_list_update())
     return room
 
-@app.delete("/rooms/{room_id}")
+@router.delete("/rooms/{room_id}")
 async def delete_room(room_id: str):
     """
     Delete a room.
@@ -113,7 +113,7 @@ async def delete_room(room_id: str):
     return {"status": "deleted", "room_id": room_id}
 
 
-@app.get("/rooms/{room_id}", response_model=Room)
+@router.get("/rooms/{room_id}", response_model=Room)
 async def get_room(room_id: str):
     """
     Get details of a specific room.

@@ -1,11 +1,12 @@
+# backend/api/metrics.py
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
-from app.core import state
+from backend.core import state
 
 router = APIRouter()
 
-@app.get("/metrics")
+@router.get("/metrics")
 async def get_metrics():
     """
     Cost monitoring and scaling metrics endpoint.

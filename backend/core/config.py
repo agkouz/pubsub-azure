@@ -1,4 +1,4 @@
-# app/core/config.py
+# backend/core/config.py
 import os
 
 class Settings:

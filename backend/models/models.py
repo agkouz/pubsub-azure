@@ -1,6 +1,6 @@
-# app/models/room.py
+# backend/models/models.py
+from typing import Optional
 from pydantic import BaseModel
-from typing import Optional, List
 
 class Room(BaseModel):
     id: str

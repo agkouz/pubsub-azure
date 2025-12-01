@@ -45,6 +45,8 @@ See COST_ANALYSIS.md for complete cost breakdown and migration guides.
 Author: Alkis
 Version: 2.0 - Cost-Optimal Dynamic Chatrooms
 """
+# backend/main.py
+
 from __future__ import annotations
 
 import asyncio
@@ -52,20 +54,22 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.logging import setup_logging, get_logger
-from app.services.service_bus import listen_to_service_bus
-from app.api.routes import root, health, metrics, rooms, publish
-from app.api import websocket as websocket_module
+from backend.core.logging import setup_logging, get_logger
+from backend.services.service_bus import listen_to_service_bus
+from backend.api.routes import root, health, metrics, rooms, publish
+from backend.api import websocket as websocket_module
 
+# Configure logging first
 setup_logging()
 logger = get_logger(__name__)
 
+# FastAPI app
 app = FastAPI(title="Azure Dynamic Chatrooms - Cost Optimal")
 
 # CORS (relaxed for now – tighten in prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: restrict in production
+    allow_origins=["*"],  # TODO: Restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,23 +82,20 @@ app.include_router(metrics.router)
 app.include_router(rooms.router)
 app.include_router(publish.router)
 
-# WebSocket
+# WebSocket routes
 app.include_router(websocket_module.router)
 
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Application starting - Dynamic Chatrooms enabled")
+    # Start Service Bus listener in the background
     asyncio.create_task(listen_to_service_bus())
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
-
-
-
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000)
 
 # ============================================================================
 # END OF FILE

@@ -1,15 +1,16 @@
+# backend/api/publish.py
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from app.models.room import PublishMessageRequest
-from app.core import state
-from app.services.service_bus import publish_to_service_bus
+from backend.models.room import PublishMessageRequest
+from backend.core import state
+from backend.services.service_bus import publish_to_service_bus
 
 # ============================================================================
 # MESSAGE PUBLISHING ENDPOINT
 # ============================================================================
-@app.post("/publish")
+@router.post("/publish")
 async def publish_message(request: PublishMessageRequest):
     """
     Publish a message to a specific room via Service Bus.

@@ -1,4 +1,4 @@
-# app/api/websocket.py
+# backend/api/websocket.py
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.core import state
+from backend.core import state
 
 logger = logging.getLogger(__name__)
 

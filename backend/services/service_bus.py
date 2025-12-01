@@ -1,4 +1,7 @@
-# app/services/service_bus.py
+# backend/services/service_bus.py
+
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -7,9 +10,9 @@ from azure.servicebus.aio import ServiceBusClient as AsyncServiceBusClient
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.identity import DefaultAzureCredential
-from app.core.config import settings
-from app.core import state
 
+from backend.core.config import settings
+from backend.core import state
 logger = logging.getLogger(__name__)
 
 # ============================================================================
@@ -141,15 +144,23 @@ async def listen_to_service_bus():
             credential=credential,
         )
     else:
+        credential = None
         client = ServiceBusClient.from_connection_string(
             settings.AZURE_SERVICEBUS_CONNECTION_STRING
         )
 
-    with client:
-        sender = client.get_topic_sender(topic_name=settings.TOPIC_NAME)
-        with sender:
-            message = ServiceBusMessage(
-                body=json.dumps(message_data),
-                application_properties={"room_id": message_data["room_id"]},
-            )
-            sender.send_messages(message)
+    try:
+        with client:
+            sender = client.get_topic_sender(topic_name=settings.TOPIC_NAME)
+            with sender:
+                message = ServiceBusMessage(
+                    body=json.dumps(message_data),
+                    application_properties={"room_id": message_data["room_id"]},
+                )
+                sender.send_messages(message)
+    finally:
+        if credential is not None:
+            try:
+                credential.close()
+            except Exception:
+                pass

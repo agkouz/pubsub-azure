@@ -1,8 +1,8 @@
-# app/api/utils.py
+# backend/api/utils.py
 
 from __future__ import annotations
 
-from app.core import state
+from backend.core import state
 
 async def broadcast_room_list_update():
     """

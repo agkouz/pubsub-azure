@@ -1,3 +1,15 @@
+# backend/services/connection_manager.py
+
+from __future__ import annotations
+
+from typing import Dict, Set
+from fastapi import WebSocket
+import logging
+
+from backend.services.room_manager import RoomManager
+
+logger = logging.getLogger(__name__)
+
 # ============================================================================
 # WEBSOCKET CONNECTION MANAGER
 # ============================================================================
@@ -30,7 +42,7 @@ class ConnectionManager:
           where N is the number of rooms, which scales terribly!
     """
     
-    def __init__(self):
+    def __init__(self, room_manager: RoomManager) -> None:
         """Initialize connection manager with empty data structures."""
         # Map: room_id -> Set[WebSocket connections]
         self.rooms: Dict[str, Set[WebSocket]] = {}
@@ -40,8 +52,9 @@ class ConnectionManager:
         
         # Map: WebSocket -> user_id (for logging)
         self.connection_users: Dict[WebSocket, str] = {}
-    
-    async def connect(self, websocket: WebSocket, user_id: str = "anonymous"):
+        self.room_manager = room_manager
+
+    async def connect(self, websocket: WebSocket, user_id: str = "anonymous") -> None:
         """
         Accept a new WebSocket connection.
         
@@ -59,9 +72,9 @@ class ConnectionManager:
         self.connection_rooms[websocket] = set()
         self.connection_users[websocket] = user_id
         
-        logger.info(f"✓ User {user_id} connected. Total: {len(self.connection_rooms)}")
+        logger.info("✓ User %s connected. Total: %d", user_id, len(self.connection_rooms))
     
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> None:
         """
         Handle WebSocket disconnection and cleanup.
         
@@ -82,7 +95,7 @@ class ConnectionManager:
                 if room_id in self.rooms:
                     self.rooms[room_id].discard(websocket)
                     # Update member count in room metadata
-                    room_manager.update_member_count(room_id, len(self.rooms[room_id]))
+                    self.room_manager.update_member_count(room_id, len(self.rooms[room_id]))
                     # Clean up empty rooms from memory
                     if not self.rooms[room_id]:
                         del self.rooms[room_id]
@@ -91,9 +104,9 @@ class ConnectionManager:
             del self.connection_rooms[websocket]
             del self.connection_users[websocket]
             
-            logger.info(f"✗ User {user_id} disconnected. Total: {len(self.connection_rooms)}")
+            logger.info("✗ User %s disconnected. Total: %d", user_id, len(self.connection_rooms))
     
-    async def join_room(self, websocket: WebSocket, room_id: str):
+    async def join_room(self, websocket: WebSocket, room_id: str) -> None:
         """
         Subscribe a WebSocket connection to a room.
         
@@ -112,9 +125,9 @@ class ConnectionManager:
         to this room via Service Bus.
         """
         # Verify room exists
-        room = room_manager.get_room(room_id)
+        room = self.room_manager.get_room(room_id)
         if not room:
-            await websocket.send_json({"type": "error", "message": f"Room not found"})
+            await websocket.send_json({"type": "error", "message": "Room not found"})
             return
         
         if websocket not in self.connection_rooms:
@@ -130,19 +143,21 @@ class ConnectionManager:
         
         # Update member count
         member_count = len(self.rooms[room_id])
-        room_manager.update_member_count(room_id, member_count)
+        self.room_manager.update_member_count(room_id, member_count)
         
         user_id = self.connection_users.get(websocket, "anonymous")
-        logger.info(f"→ {user_id} joined '{room.name}' ({member_count} members)")
+        logger.info("→ %s joined '%s' (%s members)", user_id, room.name, member_count)
         
         # Send confirmation to client
-        await websocket.send_json({
-            "type": "room_joined",
-            "room": room.dict(),
-            "member_count": member_count
-        })
-    
-    async def leave_room(self, websocket: WebSocket, room_id: str):
+        await websocket.send_json(
+            {
+                "type": "room_joined",
+                "room": room.model_dump(),
+                "member_count": member_count,
+            }
+        )
+
+    async def leave_room(self, websocket: WebSocket, room_id: str) -> None:
         """
         Unsubscribe a WebSocket connection from a room.
         
@@ -164,20 +179,22 @@ class ConnectionManager:
                 # Remove from room's connection set
                 self.rooms[room_id].discard(websocket)
                 member_count = len(self.rooms[room_id])
-                room_manager.update_member_count(room_id, member_count)
+                self.room_manager.update_member_count(room_id, member_count)
                 
                 # Clean up empty room
                 if not self.rooms[room_id]:
                     del self.rooms[room_id]
                 
                 # Send confirmation to client
-                await websocket.send_json({
-                    "type": "room_left",
-                    "room_id": room_id,
-                    "member_count": member_count
-                })
+                await websocket.send_json(
+                    {
+                        "type": "room_left",
+                        "room_id": room_id,
+                        "member_count": member_count,
+                    }
+                )
     
-    async def broadcast_to_room(self, room_id: str, message: dict):
+    async def broadcast_to_room(self, room_id: str, message: dict) -> None:
         """
         Broadcast a message to all WebSockets subscribed to a room.
         
@@ -201,12 +218,13 @@ class ConnectionManager:
         """
         if room_id not in self.rooms:
             # No one subscribed to this room currently
+            logger.info("[routing] Skipped broadcast: room=%s has 0 subscribers", room_id)
             return
         
         disconnected = set()
         connections = self.rooms[room_id].copy()  # Copy to avoid modification during iteration
         
-        logger.info(f"📨 Broadcasting to room {room_id}: {len(connections)} clients")
+        logger.info("📨 Broadcasting to room %s: %d clients", room_id, len(connections))
         
         # Send to each connection in the room
         for connection in connections:
@@ -230,12 +248,12 @@ class ConnectionManager:
             
         Used by the /metrics endpoint and for debugging.
         """
-        result = {}
+        result: Dict[str, dict] = {}
         for room_id, connections in self.rooms.items():
-            room = room_manager.get_room(room_id)
+            room = self.room_manager.get_room(room_id)
             if room:
                 result[room_id] = {
                     "name": room.name,
-                    "member_count": len(connections)
+                    "member_count": len(connections),
                 }
         return result

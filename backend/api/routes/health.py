@@ -1,12 +1,12 @@
-# app/api/routes/health.py
+# backend/api/routes/health.py
 
 from fastapi import APIRouter
 
-from app.core import state
+from backend.core import state
 
 router = APIRouter()
 
-@app.get("/health")
+@router.get("/health")
 async def health():
     """
     Health check endpoint.

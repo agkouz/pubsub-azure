@@ -1,4 +1,4 @@
-# app/core/logging.py
+# backend/core/logging.py
 
 import logging
 import os
@@ -49,7 +49,7 @@ def get_logger(name: str | None = None) -> logging.Logger:
     Helper to get a logger with our app's configuration applied.
 
     Usage:
-        from app.core.logging import get_logger
+        from backend.core.logging import get_logger
 
         logger = get_logger(__name__)
         logger.info("Hello from my module")
