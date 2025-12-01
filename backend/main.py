@@ -698,7 +698,9 @@ async def listen_to_service_bus():
                             logger.warning("Message without room_id - ignoring")
 
                         # Mark message as processed
+                        logger.info(f'Waiting for receiver.complete_message')
                         await receiver.complete_message(msg)
+                        logger.info(f'Message processed correctly')
 
                     except json.JSONDecodeError as e:
                         logger.error(f"JSON decode error: {e}")
@@ -1141,7 +1143,8 @@ async def publish_message(request: PublishMessageRequest):
                 
                 # Increment counter for metrics
                 message_counter += 1
-        
+
+        logger.info(f"📤 Published message to topic '{TOPIC_NAME}' for room {request.room_id}: {message_data}")
         return {"status": "success", "room": room.name}
     
     except Exception as e:
