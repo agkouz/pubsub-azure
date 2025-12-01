@@ -56,7 +56,7 @@ az webapp config appsettings set \
   --resource-group uniliver-rg \
   --name simple-backend-unlr-bse7b2cudad6h7gs \
   --settings \
-    AZURE_SERVICEBUS_CONNECTION_STRING="..." \
+    AZURE_SERVICEBUS_CONNECTION_STRING="Endpoint=sb://simple-pubsub-unlr.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=rdOcdkRg7qToYdk61zqP3hIeiB8MY9TMd+ASbNlbDiY=" \
     AZURE_SERVICEBUS_TOPIC_NAME="messages" \
     AZURE_SERVICEBUS_SUBSCRIPTION_NAME="backend-subscription"
 ```

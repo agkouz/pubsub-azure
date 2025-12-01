@@ -70,21 +70,7 @@ az webapp deployment list-publishing-profiles \
 - Value: Open the backend `.PublishSettings` file and copy **entire contents**
 - Click **Add secret**
 
-#### Frontend Environment Variables:
-
-**3. REACT_APP_BACKEND_URL**
-- Name: `REACT_APP_BACKEND_URL`
-- Value: `https://simple-inrm-gateway.azure-api.net`
-
-**4. REACT_APP_WS_URL**
-- Name: `REACT_APP_WS_URL`
-- Value: `wss://simple-inrm-gateway.azure-api.net/ws`
-
-**5. REACT_APP_APIM_SUBSCRIPTION_KEY**
-- Name: `REACT_APP_APIM_SUBSCRIPTION_KEY`
-- Value: Your APIM subscription key
-
-### Quick Command to Get Subscription Key
+### Quick Command to Get Subscription Key (Optional)
 
 ```bash
 az apim subscription show \
