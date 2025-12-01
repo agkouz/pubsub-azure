@@ -646,78 +646,95 @@ async def listen_to_service_bus():
 
     logger.info("🚀 Starting Service Bus listener...")
 
-    try:
-        # Create async Service Bus client with Managed Identity or connection string
-        if USE_AZURE_AD:
-            credential = AsyncDefaultAzureCredential()
-            client = AsyncServiceBusClient(
-                fully_qualified_namespace=NAMESPACE_FQDN,
-                credential=credential
-            )
-        else:
-            client = AsyncServiceBusClient.from_connection_string(CONNECTION_STRING)
-
-        async with client:
-            receiver = client.get_subscription_receiver(
-                topic_name=TOPIC_NAME,
-                subscription_name=SUBSCRIPTION_NAME,
-                max_wait_time=5,  # wait up to 5s for new messages
-            )
-
-            async with receiver:
-                logger.info(
-                    f"✓ Listening to Service Bus topic='{TOPIC_NAME}', "
-                    f"subscription='{SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
+    # Outer loop: keep trying forever
+    while True:
+        try:
+            # Create async credential & client
+            if USE_AZURE_AD:
+                credential = AsyncDefaultAzureCredential()
+                client = AsyncServiceBusClient(
+                    fully_qualified_namespace=NAMESPACE_FQDN,
+                    credential=credential
                 )
+            else:
+                credential = None  # nothing to close
+                client = AsyncServiceBusClient.from_connection_string(CONNECTION_STRING)
 
-                while True:
-                    try:
-                        # Pull up to 10 messages at a time
-                        messages = await receiver.receive_messages(
-                            max_message_count=10,
-                            max_wait_time=5
+            try:
+                async with client:
+                    receiver = client.get_subscription_receiver(
+                        topic_name=TOPIC_NAME,
+                        subscription_name=SUBSCRIPTION_NAME,
+                        max_wait_time=5,  # wait up to 5s per receive
+                    )
+
+                    async with receiver:
+                        logger.info(
+                            f"✓ Listening to Service Bus topic='{TOPIC_NAME}', "
+                            f"subscription='{SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
                         )
 
-                        if not messages:
-                            # No messages this cycle, just loop again
-                            continue
-
-                        for msg in messages:
+                        # Inner loop: receive messages forever
+                        while True:
                             try:
-                                # Decode body
-                                body_bytes = b"".join(msg.body)
-                                message_body = body_bytes.decode("utf-8")
-                                logger.info(f"📥 Received raw message body: {message_body}")
+                                messages = await receiver.receive_messages(
+                                    max_message_count=10,
+                                    max_wait_time=5,
+                                )
 
-                                message_data = json.loads(message_body)
-                                room_id = message_data.get("room_id")
+                                if not messages:
+                                    # No messages this cycle, just poll again
+                                    continue
 
-                                if room_id:
-                                    logger.info(
-                                        f"➡ Routing message to room_id={room_id}, "
-                                        f"content={message_data.get('content')!r}, "
-                                        f"sender={message_data.get('sender')!r}"
-                                    )
-                                    await manager.broadcast_to_room(room_id, message_data)
-                                else:
-                                    logger.warning("Message without room_id - ignoring")
+                                for msg in messages:
+                                    try:
+                                        body_bytes = b"".join(msg.body)
+                                        message_body = body_bytes.decode("utf-8")
+                                        logger.info(f"📥 Received raw message body: {message_body}")
 
-                                await receiver.complete_message(msg)
+                                        message_data = json.loads(message_body)
+                                        room_id = message_data.get("room_id")
+
+                                        if room_id:
+                                            logger.info(
+                                                f"➡ Routing message to room_id={room_id}, "
+                                                f"content={message_data.get('content')!r}, "
+                                                f"sender={message_data.get('sender')!r}"
+                                            )
+                                            await manager.broadcast_to_room(room_id, message_data)
+                                        else:
+                                            logger.warning("Message without room_id - ignoring")
+
+                                        await receiver.complete_message(msg)
+
+                                    except Exception as e:
+                                        logger.error(f"Error processing individual message: {e}")
+                                        logger.error(traceback.format_exc())
+                                        # Complete to avoid poison loops
+                                        await receiver.complete_message(msg)
+
                             except Exception as e:
-                                logger.error(f"Error processing individual message: {e}")
+                                # Errors in the receive loop (e.g. AMQP connection issues)
+                                logger.error(f"Service Bus receive loop error: {e}")
                                 logger.error(traceback.format_exc())
-                                # Complete to avoid poison loops
-                                await receiver.complete_message(msg)
+                                # Break inner loop to recreate client/receiver
+                                break
 
-                    except Exception as e:
-                        logger.error(f"Service Bus receive loop error: {e}")
-                        logger.error(traceback.format_exc())
-                        # Brief backoff on error
-                        await asyncio.sleep(5)
+            finally:
+                if credential is not None:
+                    # Clean up async credential to avoid 'Unclosed client session'
+                    try:
+                        await credential.close()
+                    except Exception:
+                        pass
 
-    except Exception as e:
-        logger.error(f"Service Bus listener error (outer): {e}")
-        logger.error(traceback.format_exc())
+        except Exception as e:
+            # Outer-level failure: log and retry after backoff
+            logger.error(f"Service Bus listener error (outer): {e}")
+            logger.error(traceback.format_exc())
+
+        # Small delay before reconnecting
+        await asyncio.sleep(5)
 # ============================================================================
 # APPLICATION LIFECYCLE EVENTS
 # ============================================================================
