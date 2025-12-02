@@ -134,33 +134,33 @@ async def listen_to_service_bus():
 
 
     def publish_to_service_bus(message_data: dict):
-    """
-    Sync helper used by /publish endpoint.
-    """
-    if settings.USE_AZURE_AD:
-        credential = DefaultAzureCredential()
-        client = ServiceBusClient(
-            fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
-            credential=credential,
-        )
-    else:
-        credential = None
-        client = ServiceBusClient.from_connection_string(
-            settings.AZURE_SERVICEBUS_CONNECTION_STRING
-        )
+        """
+        Sync helper used by /publish endpoint.
+        """
+        if settings.USE_AZURE_AD:
+            credential = DefaultAzureCredential()
+            client = ServiceBusClient(
+                fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
+                credential=credential,
+            )
+        else:
+            credential = None
+            client = ServiceBusClient.from_connection_string(
+                settings.AZURE_SERVICEBUS_CONNECTION_STRING
+            )
 
-    try:
-        with client:
-            sender = client.get_topic_sender(topic_name=settings.TOPIC_NAME)
-            with sender:
-                message = ServiceBusMessage(
-                    body=json.dumps(message_data),
-                    application_properties={"room_id": message_data["room_id"]},
-                )
-                sender.send_messages(message)
-    finally:
-        if credential is not None:
-            try:
-                credential.close()
-            except Exception:
-                pass
+        try:
+            with client:
+                sender = client.get_topic_sender(topic_name=settings.TOPIC_NAME)
+                with sender:
+                    message = ServiceBusMessage(
+                        body=json.dumps(message_data),
+                        application_properties={"room_id": message_data["room_id"]},
+                    )
+                    sender.send_messages(message)
+        finally:
+            if credential is not None:
+                try:
+                    credential.close()
+                except Exception:
+                    pass
