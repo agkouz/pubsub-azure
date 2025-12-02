@@ -6,6 +6,8 @@ import logging
 
 from models.models import Room
 
+logger = logging.getLogger(__name__)
+
 ROOMS_FILE = "rooms.json"  # File where room metadata is persisted
 
 # ============================================================================
