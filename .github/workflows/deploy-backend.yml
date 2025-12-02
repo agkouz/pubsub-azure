@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - refactor/proper-structure
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
