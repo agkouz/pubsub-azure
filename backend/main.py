@@ -54,10 +54,10 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.logging import setup_logging, get_logger
-from backend.services.service_bus import listen_to_service_bus
-from backend.api.routes import root, health, metrics, rooms, publish
-from backend.api import websocket as websocket_module
+from core.logging import setup_logging, get_logger
+from services.service_bus import listen_to_service_bus
+from api.routes import root, health, metrics, rooms, publish
+from api import websocket as websocket_module
 
 # Configure logging first
 setup_logging()
@@ -95,7 +95,7 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
 
 # ============================================================================
 # END OF FILE

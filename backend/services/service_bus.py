@@ -11,8 +11,8 @@ from azure.servicebus import ServiceBusClient, ServiceBusMessage
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.identity import DefaultAzureCredential
 
-from backend.core.config import settings
-from backend.core import state
+from core.config import settings
+from core import state
 logger = logging.getLogger(__name__)
 
 # ============================================================================

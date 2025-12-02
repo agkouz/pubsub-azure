@@ -6,7 +6,7 @@ from typing import Dict, Set
 from fastapi import WebSocket
 import logging
 
-from backend.services.room_manager import RoomManager
+from services.room_manager import RoomManager
 
 logger = logging.getLogger(__name__)
 

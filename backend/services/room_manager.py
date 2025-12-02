@@ -4,7 +4,7 @@ from typing import Dict, Set
 from fastapi import WebSocket
 import logging
 
-from backend.models.models import Room
+from models.models import Room
 
 ROOMS_FILE = "rooms.json"  # File where room metadata is persisted
 

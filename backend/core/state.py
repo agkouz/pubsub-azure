@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from backend.services.room_manager import RoomManager
-from backend.services.connection_manager import ConnectionManager
+from services.room_manager import RoomManager
+from services.connection_manager import ConnectionManager
 
 # Global singletons for app state
 room_manager = RoomManager()
