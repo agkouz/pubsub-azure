@@ -3,13 +3,16 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
-from backend.models.room import PublishMessageRequest
-from backend.core import state
-from backend.services.service_bus import publish_to_service_bus
+from models.models import PublishMessageRequest
+from core import state
+from services.service_bus import publish_to_service_bus
 
 # ============================================================================
 # MESSAGE PUBLISHING ENDPOINT
 # ============================================================================
+
+router = APIRouter()
+
 @router.post("/publish")
 async def publish_message(request: PublishMessageRequest):
     """

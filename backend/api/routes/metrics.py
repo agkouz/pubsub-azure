@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from datetime import datetime, timezone
 
-from backend.core import state
+from core import state
 
 router = APIRouter()
 
@@ -45,7 +45,7 @@ async def get_metrics():
         - Plan infrastructure changes
         - Track growth
     """
-   uptime_seconds = (datetime.now(timezone.utc) - state.app_start_time).total_seconds()
+    uptime_seconds = (datetime.now(timezone.utc) - state.app_start_time).total_seconds()
 
     if uptime_seconds > 0:
         messages_per_second = state.message_counter / uptime_seconds

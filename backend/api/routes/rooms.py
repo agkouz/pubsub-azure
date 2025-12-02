@@ -5,9 +5,9 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 import asyncio
 
-from backend.models.room import Room, CreateRoomRequest
-from backend.core import state
-from backend.api.utils import broadcast_room_list_update
+from models.models import Room, CreateRoomRequest
+from core import state
+from api.routes.utils import broadcast_room_list_update
 
 router = APIRouter()
 

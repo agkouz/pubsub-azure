@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.core import state
+from core import state
 
 async def broadcast_room_list_update():
     """

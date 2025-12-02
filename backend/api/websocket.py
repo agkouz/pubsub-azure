@@ -7,7 +7,7 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.core import state
+from core import state
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ router = APIRouter()
 # WEBSOCKET ENDPOINT
 # ============================================================================
 
-@app.websocket("/ws")
+@router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
     """
     WebSocket endpoint for real-time bidirectional communication.

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from backend.core import state
+from core import state
 
 router = APIRouter()
 
