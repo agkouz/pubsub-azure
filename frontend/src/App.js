@@ -4,7 +4,9 @@ import './App.css';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
 const SUBSCRIPTION_KEY = process.env.REACT_APP_APIM_SUBSCRIPTION_KEY || '';
-
+console.log(BACKEND_URL)
+console.log(WS_URL)
+console.log(SUBSCRIPTION_KEY)
 function App() {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -92,6 +94,9 @@ function App() {
         } else if (data.content) {
           // Regular message
           addMessage(data.content, data.sender, data.room_id, data.room_name);
+        } else if (data.type === "message_publish" && data.status === "success") {
+          // Optional: confirm message delivered
+          addSystemMessage("Server acknowledged message.");
         }
       } catch (error) {
         console.error('Error parsing message:', error);
@@ -232,33 +237,32 @@ function App() {
     }]);
   };
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || !currentRoom) return;
+  const sendMessage = () => {
+    if (!inputMessage.trim() || !currentRoom || !ws.current) return;
+    if (ws.current.readyState !== WebSocket.OPEN) {
+      addSystemMessage("WebSocket is not connected. Message not sent.", "error");
+      return;
+    }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/publish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY
-        },
-        body: JSON.stringify({
-          room_id: currentRoom.id,
-          content: inputMessage,
-          sender: username
+      ws.current.send(
+        JSON.stringify({
+          action: "message_publish",
+          data: {
+            room_id: currentRoom.id,
+            content: inputMessage,
+            sender: username,
+          },
         })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      );
 
       setInputMessage('');
     } catch (error) {
-      console.error('Failed to publish message:', error);
-      addSystemMessage(`Failed to send: ${error.message}`, 'error');
+      console.error("WebSocket send error:", error);
+      addSystemMessage(`Failed to send: ${error.message}`, "error");
     }
   };
+
 
   const selectRoom = (room) => {
     setCurrentRoom(room);

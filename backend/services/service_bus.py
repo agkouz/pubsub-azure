@@ -47,6 +47,12 @@ async def listen_to_service_bus():
         Runs continuously in background
         Uses async context managers for proper cleanup
     """
+
+    # for local debug, backend will not subscribe to pubsub
+    if not settings.ENABLE_SERVICE_BUS:
+        logger.info("Service Bus listener disabled (ENABLE_SERVICE_BUS=false)")
+        return
+
     if not settings.AZURE_SERVICEBUS_CONNECTION_STRING and not settings.AZURE_SERVICEBUS_NAMESPACE_FQDN:
         logger.warning("Service Bus not configured - messages won't be received")
         return

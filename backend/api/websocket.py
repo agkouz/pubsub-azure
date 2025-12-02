@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from services.service_bus import publish_to_service_bus
 from core import state
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
     Get Room Info:
         {"action": "get_rooms_info"}
         Response: {"type": "rooms_info", "rooms": {"uuid-123": {"name": "...", "member_count": 5}}}
-    
+
+    Publish Message:
+        {
+            "action": "message_publish", 
+            "data": {
+                "room_id": "<room_id>", 
+                "content": "<content>", 
+                "sender": "<username>"
+            }
+        }
+        Response: {"type": "message_published", "message_content"}
+
     Server -> Client Messages:
     -------------------------
     Regular Message:
@@ -80,6 +94,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
             try:
                 message = json.loads(data)
                 action = message.get("action")
+                logger.info(f"Websocket input: Action: {action}, Message: {message}")
 
                 if action == "join":
                     room_id = message.get("room_id")
@@ -115,6 +130,36 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                             "rooms": info,
                         }
                     )
+
+                elif action == "message_publish":
+                    data = message.get('data')
+                    room = state.room_manager.get_room(data['room_id'])
+                    
+                    if not room:
+                        await websocket.send_json({"type": "message_publish", "error": "Room not found"})
+                    
+                    message_data = {
+                        "room_id":  room.id,
+                        "room_name": room.name,
+                        "content": data['content'],
+                        "sender": data['sender'],
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    print(f"ENABLE SERVICE BUS IS {settings.ENABLE_SERVICE_BUS}!!!")
+                    # local mode: bypass Service Bus and just broadcast directly
+                    if not settings.ENABLE_SERVICE_BUS:
+                        # simulate what the listener would do
+                        await state.connection_manager.broadcast_to_room(data['room_id'], message_data)
+                        state.message_counter += 1
+                        await websocket.send_json({"type": "message_publish", "status": "success"})
+                        return
+                 
+                    try:
+                        publish_to_service_bus(message_data)
+                        state.message_counter += 1
+                        await websocket.send_json({"type": "message_publish", "status": "success"})
+                    except Exception as e:
+                        await websocket.send_json({"type": "message_publish", "error": f"Internal Error: {str(e)}"})
 
                 else:
                     await websocket.send_json(

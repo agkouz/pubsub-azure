@@ -14,6 +14,9 @@ class Settings:
     TOPIC_NAME: str = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "backend-messages")
     SUBSCRIPTION_NAME: str = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
 
+    # For running locally, set this to false
+    ENABLE_SERVICE_BUS: bool = os.getenv("ENABLE_SERVICE_BUS", "true").lower() == "true"
+
     @property
     def USE_AZURE_AD(self) -> bool:
         """

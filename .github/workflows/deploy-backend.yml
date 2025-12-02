@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - refactor/proper-structure
+      - feature/publish-via-websocket
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
