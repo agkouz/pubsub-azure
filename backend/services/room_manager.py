@@ -6,7 +6,7 @@ import json
 import os
 import uuid
 import logging
-from app.models.room import Room
+from models.room import Room
 
 logger = logging.getLogger(__name__)
 
