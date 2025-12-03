@@ -51,11 +51,14 @@ from __future__ import annotations
 
 import asyncio
 
+from core import state
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.config import settings
 from core.logging import setup_logging, get_logger
 from services.service_bus import listen_to_service_bus
+from services.redis_pub_sub import AsyncRedisPubSubService
 from api.routes import root, health, metrics, rooms, publish
 from api import websocket as websocket_module
 
@@ -89,13 +92,24 @@ app.include_router(websocket_module.router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Application starting - Dynamic Chatrooms enabled")
-    # Start Service Bus listener in the background
-    asyncio.create_task(listen_to_service_bus())
+
+    if settings.PUB_SUB_SERVICE == "redis":
+        # Start Redis listener in the background
+        redis_service = AsyncRedisPubSubService(host="localhost", port=6379) 
+        await redis_service.connect()
+        
+        # Store globally
+        state.redis_service = redis_service
+
+        # Start subscriber in background
+        asyncio.create_task(redis_service.listen("room:*"))    
+    elif settings.PUB_SUB_SERVICE == "service_bus":
+        asyncio.create_task(listen_to_service_bus())
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=5174)
 
 # ============================================================================
 # END OF FILE

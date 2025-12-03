@@ -13,6 +13,7 @@ class Settings:
     AZURE_SERVICEBUS_NAMESPACE_FQDN: str = os.getenv("AZURE_SERVICEBUS_NAMESPACE_FQDN", "")
     TOPIC_NAME: str = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "backend-messages")
     SUBSCRIPTION_NAME: str = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
+    PUB_SUB_SERVICE: str = os.getenv("PUB_SUB_SERVICE", "service_bus")  # or "redis"
 
     # For running locally, set this to false
     ENABLE_SERVICE_BUS: bool = os.getenv("ENABLE_SERVICE_BUS", "true").lower() == "true"
