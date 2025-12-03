@@ -109,7 +109,7 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5174)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
 
 # ============================================================================
 # END OF FILE
