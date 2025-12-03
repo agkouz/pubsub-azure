@@ -132,34 +132,54 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                     )
 
                 elif action == "message_publish":
-                    data = message.get('data')
-                    room = state.room_manager.get_room(data['room_id'])
-                    
-                    if not room:
-                        await websocket.send_json({"type": "message_publish", "error": "Room not found"})
-                    
-                    message_data = {
-                        "room_id":  room.id,
-                        "room_name": room.name,
-                        "content": data['content'],
-                        "sender": data['sender'],
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                    print(f"ENABLE SERVICE BUS IS {settings.ENABLE_SERVICE_BUS}!!!")
-                    # local mode: bypass Service Bus and just broadcast directly
-                    if not settings.ENABLE_SERVICE_BUS:
-                        # simulate what the listener would do
-                        await state.connection_manager.broadcast_to_room(data['room_id'], message_data)
+                    if settings.PUB_SUB_SERVICE == "redis":
+                        data = message.get('data')
+                        room = state.room_manager.get_room(data['room_id'])
+                        
+                        if not room:
+                            await websocket.send_json({"type": "error", "message": "Room not found"})
+                            return
+                        
+                        message_data = {
+                            "room_id": room.id,
+                            "content": data['content'],
+                            "sender": data['sender'],
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        
+                        # Publish to Redis
+                        await state.redis_service.broadcast_to_room(room.id, message_data)
                         state.message_counter += 1
                         await websocket.send_json({"type": "message_publish", "status": "success"})
-                        return
-                 
-                    try:
-                        publish_to_service_bus(message_data)
-                        state.message_counter += 1
-                        await websocket.send_json({"type": "message_publish", "status": "success"})
-                    except Exception as e:
-                        await websocket.send_json({"type": "message_publish", "error": f"Internal Error: {str(e)}"})
+                    elif settings.PUB_SUB_SERVICE == "service_bus":
+                        data = message.get('data')
+                        room = state.room_manager.get_room(data['room_id'])
+                        
+                        if not room:
+                            await websocket.send_json({"type": "message_publish", "error": "Room not found"})
+                        
+                        message_data = {
+                            "room_id":  room.id,
+                            "room_name": room.name,
+                            "content": data['content'],
+                            "sender": data['sender'],
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        print(f"ENABLE SERVICE BUS IS {settings.ENABLE_SERVICE_BUS}!!!")
+                        # local mode: bypass Service Bus and just broadcast directly
+                        if not settings.ENABLE_SERVICE_BUS:
+                            # simulate what the listener would do
+                            await state.connection_manager.broadcast_to_room(data['room_id'], message_data)
+                            state.message_counter += 1
+                            await websocket.send_json({"type": "message_publish", "status": "success"})
+                            return
+                    
+                        try:
+                            publish_to_service_bus(message_data)
+                            state.message_counter += 1
+                            await websocket.send_json({"type": "message_publish", "status": "success"})
+                        except Exception as e:
+                            await websocket.send_json({"type": "message_publish", "error": f"Internal Error: {str(e)}"})
 
                 else:
                     await websocket.send_json(

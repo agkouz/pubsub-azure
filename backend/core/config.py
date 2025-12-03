@@ -1,5 +1,6 @@
 # backend/core/config.py
 import os
+from dotenv import load_dotenv
 
 class Settings:
     """
@@ -8,11 +9,17 @@ class Settings:
         - AZURE_SERVICEBUS_NAMESPACE_FQDN holds the pubservice url if AAD authentication
         - TOPIC_NAME the topic name of pubsub
         - SUBSCRIPTION_NAME the subscription name of pubsub
+        - PUB_SUB_SERVICE the pubsub service to use: "service_bus" or "redis"
     """
+
+    # Load environment variables from the .env file
+    load_dotenv()
+
     AZURE_SERVICEBUS_CONNECTION_STRING: str = os.getenv("AZURE_SERVICEBUS_CONNECTION_STRING", "")
     AZURE_SERVICEBUS_NAMESPACE_FQDN: str = os.getenv("AZURE_SERVICEBUS_NAMESPACE_FQDN", "")
     TOPIC_NAME: str = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "backend-messages")
     SUBSCRIPTION_NAME: str = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
+    PUB_SUB_SERVICE: str = os.getenv("PUB_SUB_SERVICE", "service_bus")  # or "redis"
 
     # For running locally, set this to false
     ENABLE_SERVICE_BUS: bool = os.getenv("ENABLE_SERVICE_BUS", "true").lower() == "true"
