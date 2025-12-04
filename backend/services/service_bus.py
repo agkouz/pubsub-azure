@@ -115,13 +115,13 @@ async def listen_to_service_bus():
     logger.info("🚀 Starting Service Bus listener...")    
        
     logger.info("Initializing receiver...")
-    async with _sync_client:
+    with _sync_client:
         receiver = _sync_client.get_subscription_receiver(
             topic_name=settings.TOPIC_NAME,
             subscription_name=settings.SUBSCRIPTION_NAME,
             max_wait_time=5,
         )
-        async with receiver:
+        with receiver:
             logger.info(
                 f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
                 f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
@@ -130,11 +130,11 @@ async def listen_to_service_bus():
     
         logger.info("Waiting for messages...")
         try:
-            messages = await receiver.receive_messages(
+            messages = receiver.receive_messages(
                 max_message_count=10,
                 max_wait_time=5,
             )
-            
+
             for msg in messages:
                 try:
                     body_bytes = b"".join(msg.body)
