@@ -7,7 +7,7 @@ import json
 import logging
 import traceback
 from azure.servicebus.aio import ServiceBusClient as AsyncServiceBusClient
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
+from azure.servicebus import ServiceBusClient, ServiceBusMessage, ServiceBusReceiver
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.identity import DefaultAzureCredential
 
@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 
 _sync_credential: DefaultAzureCredential | None = None
 _sync_client: ServiceBusClient | None = None
-
+_sync_receiver: ServiceBusReceiver | None = None
 
 def _init_sync_client() -> None:
-    global _sync_credential, _sync_client
+    global _sync_credential, _sync_client, _sync_receiver
 
     if _sync_client is not None:
         return
@@ -44,7 +44,14 @@ def _init_sync_client() -> None:
             settings.AZURE_SERVICEBUS_CONNECTION_STRING
         )
 
-    logger.info("Initialized shared sync ServiceBusClient for publishing.")
+    with _sync_client:
+        if _sync_receiver is None:
+            _sync_receiver = _sync_client.get_subscription_receiver(
+                topic_name=settings.TOPIC_NAME,
+                subscription_name=settings.SUBSCRIPTION_NAME,
+                max_wait_time=5,
+            )
+            logger.info("Initialized shared sync ServiceBusClient for publishing.")
 
 
 def shutdown_sync_client() -> None:
@@ -101,7 +108,7 @@ async def listen_to_service_bus():
         Runs continuously in background
         Uses async context managers for proper cleanup
     """
-    global _sync_credential, _sync_client
+    global _sync_credential, _sync_client, _sync_receiver
 
     # for local debug, backend will not subscribe to pubsub
     if not settings.ENABLE_SERVICE_BUS:
@@ -115,19 +122,13 @@ async def listen_to_service_bus():
     logger.info("🚀 Starting Service Bus listener...")    
        
     logger.info("Initializing receiver...")
-    with _sync_client:
-        receiver = _sync_client.get_subscription_receiver(
-            topic_name=settings.TOPIC_NAME,
-            subscription_name=settings.SUBSCRIPTION_NAME,
-            max_wait_time=5,
-        )
-        with receiver:
-            logger.info(
-                f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
-                f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
-            )
 
-    
+    with _sync_receiver as receiver:
+        logger.info(
+            f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
+            f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
+        )
+
         logger.info("Waiting for messages...")
         try:
             messages = receiver.receive_messages(
@@ -164,9 +165,6 @@ async def listen_to_service_bus():
         except Exception as e:
             logger.error(f"Service Bus receive loop error: {e}")
             logger.error(traceback.format_exc())
-
-    await asyncio.sleep(5)
-
 
 def publish_to_service_bus(message_data: dict):
     """
