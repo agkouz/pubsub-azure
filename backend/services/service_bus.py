@@ -59,88 +59,88 @@ async def listen_to_service_bus():
 
     logger.info("🚀 Starting Service Bus listener...")
 
-    while True:
-        logger.info("Connecting to Service Bus...")
+
+    logger.info("Connecting to Service Bus...")
+    try:
+        if settings.USE_AZURE_AD:
+            credential = AsyncDefaultAzureCredential()
+            client = AsyncServiceBusClient(
+                fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
+                credential=credential,
+            )
+        else:
+            credential = None
+            client = AsyncServiceBusClient.from_connection_string(
+                settings.AZURE_SERVICEBUS_CONNECTION_STRING
+            )
+        logger.info("Connected to Service Bus.")
+        
         try:
-            if settings.USE_AZURE_AD:
-                credential = AsyncDefaultAzureCredential()
-                client = AsyncServiceBusClient(
-                    fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
-                    credential=credential,
+            logger.info("Initializing receiver...")
+            async with client:
+                receiver = client.get_subscription_receiver(
+                    topic_name=settings.TOPIC_NAME,
+                    subscription_name=settings.SUBSCRIPTION_NAME,
+                    max_wait_time=5,
                 )
-            else:
-                credential = None
-                client = AsyncServiceBusClient.from_connection_string(
-                    settings.AZURE_SERVICEBUS_CONNECTION_STRING
-                )
-            logger.info("Connected to Service Bus.")
-            
-            try:
-                logger.info("Initializing receiver...")
-                async with client:
-                    receiver = client.get_subscription_receiver(
-                        topic_name=settings.TOPIC_NAME,
-                        subscription_name=settings.SUBSCRIPTION_NAME,
-                        max_wait_time=5,
+                async with receiver:
+                    logger.info(
+                        f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
+                        f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
                     )
-                    async with receiver:
-                        logger.info(
-                            f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
-                            f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
-                        )
 
-                        while True:
-                            logger.info("Waiting for messages...")
-                            try:
-                                messages = await receiver.receive_messages(
-                                    max_message_count=10,
-                                    max_wait_time=5,
-                                )
-                                if not messages:
-                                    continue
+                    while True:
+                        logger.info("Waiting for messages...")
+                        try:
+                            messages = await receiver.receive_messages(
+                                max_message_count=10,
+                                max_wait_time=5,
+                            )
+                            if not messages:
+                                continue
 
-                                for msg in messages:
-                                    try:
-                                        body_bytes = b"".join(msg.body)
-                                        message_body = body_bytes.decode("utf-8")
-                                        logger.info(f"📥 Received raw message body: {message_body}")
+                            for msg in messages:
+                                try:
+                                    body_bytes = b"".join(msg.body)
+                                    message_body = body_bytes.decode("utf-8")
+                                    logger.info(f"📥 Received raw message body: {message_body}")
 
-                                        message_data = json.loads(message_body)
-                                        room_id = message_data.get("room_id")
+                                    message_data = json.loads(message_body)
+                                    room_id = message_data.get("room_id")
 
-                                        if room_id:
-                                            logger.info(
-                                                f"➡ Routing message to room_id={room_id}, "
-                                                f"content={message_data.get('content')!r}, "
-                                                f"sender={message_data.get('sender')!r}"
-                                            )
-                                            await state.connection_manager.broadcast_to_room(room_id, message_data)
-                                        else:
-                                            logger.warning("Message without room_id - ignoring")
+                                    if room_id:
+                                        logger.info(
+                                            f"➡ Routing message to room_id={room_id}, "
+                                            f"content={message_data.get('content')!r}, "
+                                            f"sender={message_data.get('sender')!r}"
+                                        )
+                                        await state.connection_manager.broadcast_to_room(room_id, message_data)
+                                    else:
+                                        logger.warning("Message without room_id - ignoring")
 
-                                        await receiver.complete_message(msg)
+                                    await receiver.complete_message(msg)
 
-                                    except Exception as e:
-                                        logger.error(f"Error processing individual message: {e}")
-                                        logger.error(traceback.format_exc())
-                                        await receiver.complete_message(msg)
+                                except Exception as e:
+                                    logger.error(f"Error processing individual message: {e}")
+                                    logger.error(traceback.format_exc())
+                                    await receiver.complete_message(msg)
 
-                            except Exception as e:
-                                logger.error(f"Service Bus receive loop error: {e}")
-                                logger.error(traceback.format_exc())
-                                break
-            finally:
-                if credential is not None:
-                    try:
-                        await credential.close()
-                    except Exception:
-                        pass
+                        except Exception as e:
+                            logger.error(f"Service Bus receive loop error: {e}")
+                            logger.error(traceback.format_exc())
+                            break
+        finally:
+            if credential is not None:
+                try:
+                    await credential.close()
+                except Exception:
+                    pass
 
-        except Exception as e:
-            logger.error(f"Service Bus listener error (outer): {e}")
-            logger.error(traceback.format_exc())
+    except Exception as e:
+        logger.error(f"Service Bus listener error (outer): {e}")
+        logger.error(traceback.format_exc())
 
-        await asyncio.sleep(5)
+    await asyncio.sleep(5)
 
 
 def publish_to_service_bus(message_data: dict):
