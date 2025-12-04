@@ -110,20 +110,9 @@ class AsyncServiceBusService:
             logger.error(traceback.format_exc())
 
     async def listen(self):
-        """
-        Listen to Service Bus subscription and broadcast to WebSockets.
-
-        Cost-optimal design:
-            - Single subscription for ALL rooms
-            - Routes by room_id in message body
-            - 2 operations per message (1 publish + 1 delivery)
-        """
-        if not settings.ENABLE_SERVICE_BUS:
-            logger.info("Service Bus listener disabled")
-            return
-
+        """Optimized listener for minimal latency."""
         if not self.async_client:
-            logger.warning("Service Bus not connected - call connect() first")
+            logger.warning("Service Bus not connected")
             return
 
         logger.info("🚀 Starting Service Bus listener...")
@@ -133,57 +122,38 @@ class AsyncServiceBusService:
                 receiver = self.async_client.get_subscription_receiver(
                     topic_name=settings.TOPIC_NAME,
                     subscription_name=settings.SUBSCRIPTION_NAME,
-                    max_wait_time=5,
+                    max_wait_time=0.5,      # ← Poll every 500ms
+                    prefetch_count=20,       # ← Prefetch for efficiency
                 )
 
                 async with receiver:
-                    logger.info(
-                        f"✓ Subscribed to Service Bus topic '{settings.TOPIC_NAME}', "
-                        f"subscription '{settings.SUBSCRIPTION_NAME}'"
-                    )
+                    logger.info(f"✓ Subscribed to '{settings.TOPIC_NAME}'")
 
                     while True:
-                        try:
-                            messages = await receiver.receive_messages(
-                                max_message_count=10,
-                                max_wait_time=5,
-                            )
+                        messages = await receiver.receive_messages(
+                            max_message_count=5,   # ← Smaller batches
+                            max_wait_time=0.5,
+                        )
 
-                            if not messages:
-                                continue
+                        for msg in messages:
+                            try:
+                                body_bytes = b"".join(msg.body)
+                                message_data = json.loads(body_bytes)
+                                room_id = message_data.get("room_id")
 
-                            for msg in messages:
-                                try:
-                                    body_bytes = b"".join(msg.body)
-                                    message_data = json.loads(body_bytes.decode("utf-8"))
-                                    room_id = message_data.get("room_id")
-
-                                    if room_id:
-                                        logger.info(
-                                            f"➡ Service Bus: Routing to room={room_id}, "
-                                            f"sender={message_data.get('sender')}"
-                                        )
-                                        await state.connection_manager.broadcast_to_room(
-                                            room_id, message_data
-                                        )
-                                    else:
-                                        logger.warning("Service Bus message without room_id - ignoring")
-
-                                    await receiver.complete_message(msg)
-
-                                except Exception as e:
-                                    logger.error(f"Error processing Service Bus message: {e}")
-                                    await receiver.complete_message(msg)
-
-                        except Exception as e:
-                            logger.error(f"Service Bus receive error: {e}")
-                            logger.error(traceback.format_exc())
-                            break
+                                if room_id:
+                                    await state.connection_manager.broadcast_to_room(
+                                        room_id, message_data
+                                    )
+                                
+                                await receiver.complete_message(msg)
+                            except Exception as e:
+                                logger.error(f"Error processing message: {e}")
+                                await receiver.complete_message(msg)
 
         except Exception as e:
-            logger.error(f"Service Bus listener error: {e}")
-            logger.error(traceback.format_exc())
-
+            logger.error(f"Listener error: {e}")
+            
     async def close(self):
         """Close all connections."""
         try:
