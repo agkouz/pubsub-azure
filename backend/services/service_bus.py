@@ -60,6 +60,7 @@ async def listen_to_service_bus():
     logger.info("🚀 Starting Service Bus listener...")
 
     while True:
+        logger.info("Connecting to Service Bus...")
         try:
             if settings.USE_AZURE_AD:
                 credential = AsyncDefaultAzureCredential()
@@ -72,8 +73,10 @@ async def listen_to_service_bus():
                 client = AsyncServiceBusClient.from_connection_string(
                     settings.AZURE_SERVICEBUS_CONNECTION_STRING
                 )
-
+            logger.info("Connected to Service Bus.")
+            
             try:
+                logger.info("Initializing receiver...")
                 async with client:
                     receiver = client.get_subscription_receiver(
                         topic_name=settings.TOPIC_NAME,
@@ -87,6 +90,7 @@ async def listen_to_service_bus():
                         )
 
                         while True:
+                            logger.debug("Waiting for messages...")
                             try:
                                 messages = await receiver.receive_messages(
                                     max_message_count=10,
