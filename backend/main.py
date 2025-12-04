@@ -105,12 +105,17 @@ async def startup_event():
         # Start subscriber in background
         asyncio.create_task(redis_service.listen("room:*"))    
     elif settings.PUB_SUB_SERVICE == "service_bus":
-        _init_sync_client()
-        asyncio.create_task(listen_to_service_bus())
+        from services.async_service_bus_service import AsyncServiceBusService
+        service_bus = AsyncServiceBusService()
+        await service_bus.connect()
+        state.service_bus = service_bus
+        asyncio.create_task(service_bus.listen())
 
 @app.on_event("shutdown")
 async def on_shutdown():
     shutdown_sync_client()
+    if hasattr(state, 'service_bus'):
+        await state.service_bus.close()
 
 if __name__ == "__main__":
     import uvicorn
