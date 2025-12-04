@@ -15,6 +15,60 @@ from core.config import settings
 from core import state
 logger = logging.getLogger(__name__)
 
+# ========================================================================
+# SHARED SYNC SERVICE BUS CLIENT (FOR PUBLISHING)
+# ========================================================================
+
+_sync_credential: DefaultAzureCredential | None = None
+_sync_client: ServiceBusClient | None = None
+
+
+def _init_sync_client() -> None:
+    global _sync_credential, _sync_client
+
+    if _sync_client is not None:
+        return
+
+    if not settings.ENABLE_SERVICE_BUS:
+        logger.info("Service Bus disabled (ENABLE_SERVICE_BUS=false) - publisher will be no-op.")
+        return
+
+    if settings.USE_AZURE_AD:
+        _sync_credential = DefaultAzureCredential()
+        _sync_client = ServiceBusClient(
+            fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
+            credential=_sync_credential,
+        )
+    else:
+        _sync_client = ServiceBusClient.from_connection_string(
+            settings.AZURE_SERVICEBUS_CONNECTION_STRING
+        )
+
+    logger.info("Initialized shared sync ServiceBusClient for publishing.")
+
+
+def shutdown_sync_client() -> None:
+    """
+    Call this from your FastAPI shutdown event to cleanly close credentials.
+    """
+    global _sync_credential, _sync_client
+
+    try:
+        if _sync_client is not None:
+            _sync_client.close()
+    except Exception:
+        logger.exception("Error closing ServiceBusClient on shutdown.")
+
+    try:
+        if _sync_credential is not None:
+            _sync_credential.close()
+    except Exception:
+        logger.exception("Error closing DefaultAzureCredential on shutdown.")
+
+    _sync_client = None
+    _sync_credential = None
+
+
 # ============================================================================
 # SERVICE BUS BACKGROUND LISTENER
 # ============================================================================
@@ -146,31 +200,27 @@ async def listen_to_service_bus():
 def publish_to_service_bus(message_data: dict):
     """
     Sync helper used by /publish endpoint.
+
+    Uses a shared ServiceBusClient to avoid reconnecting on every call.
     """
-    if settings.USE_AZURE_AD:
-        credential = DefaultAzureCredential()
-        client = ServiceBusClient(
-            fully_qualified_namespace=settings.AZURE_SERVICEBUS_NAMESPACE_FQDN,
-            credential=credential,
-        )
-    else:
-        credential = None
-        client = ServiceBusClient.from_connection_string(
-            settings.AZURE_SERVICEBUS_CONNECTION_STRING
-        )
+    if not settings.ENABLE_SERVICE_BUS:
+        logger.debug("Service Bus disabled - skipping publish.")
+        return
+
+    _init_sync_client()
+
+    if _sync_client is None:
+        logger.warning("Service Bus client not initialized - message not sent.")
+        return
 
     try:
-        with client:
-            sender = client.get_topic_sender(topic_name=settings.TOPIC_NAME)
-            with sender:
-                message = ServiceBusMessage(
-                    body=json.dumps(message_data),
-                    application_properties={"room_id": message_data["room_id"]},
-                )
-                sender.send_messages(message)
-    finally:
-        if credential is not None:
-            try:
-                credential.close()
-            except Exception:
-                pass
+        # get_topic_sender is cheap; you can optimize further by caching the sender too
+        sender = _sync_client.get_topic_sender(topic_name=settings.TOPIC_NAME)
+        with sender:
+            message = ServiceBusMessage(
+                body=json.dumps(message_data),
+                application_properties={"room_id": message_data["room_id"]},
+            )
+            sender.send_messages(message)
+    except Exception:
+        logger.exception("Error publishing message to Service Bus.")

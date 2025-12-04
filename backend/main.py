@@ -61,6 +61,7 @@ from services.service_bus import listen_to_service_bus
 from services.redis_pub_sub import AsyncRedisPubSubService
 from api.routes import root, health, metrics, rooms, publish
 from api import websocket as websocket_module
+from services.service_bus import shutdown_sync_client
 
 # Configure logging first
 setup_logging()
@@ -106,6 +107,9 @@ async def startup_event():
     elif settings.PUB_SUB_SERVICE == "service_bus":
         asyncio.create_task(listen_to_service_bus())
 
+@app.on_event("shutdown")
+async def on_shutdown():
+    shutdown_sync_client()
 
 if __name__ == "__main__":
     import uvicorn
