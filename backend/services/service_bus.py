@@ -123,48 +123,48 @@ async def listen_to_service_bus():
        
     logger.info("Initializing receiver...")
 
-    async with _sync_receiver as receiver:
-        logger.info(
-            f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
-            f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
+
+    logger.info(
+        f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
+        f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
+    )
+
+    logger.info("Waiting for messages...")
+    try:
+        messages = _sync_receiver.receive_messages(
+            max_message_count=10,
+            max_wait_time=5,
         )
 
-        logger.info("Waiting for messages...")
-        try:
-            messages = receiver.receive_messages(
-                max_message_count=10,
-                max_wait_time=5,
-            )
+        for msg in messages:
+            try:
+                body_bytes = b"".join(msg.body)
+                message_body = body_bytes.decode("utf-8")
+                logger.info(f"📥 Received raw message body: {message_body}")
 
-            for msg in messages:
-                try:
-                    body_bytes = b"".join(msg.body)
-                    message_body = body_bytes.decode("utf-8")
-                    logger.info(f"📥 Received raw message body: {message_body}")
+                message_data = json.loads(message_body)
+                room_id = message_data.get("room_id")
 
-                    message_data = json.loads(message_body)
-                    room_id = message_data.get("room_id")
+                if room_id:
+                    logger.info(
+                        f"➡ Routing message to room_id={room_id}, "
+                        f"content={message_data.get('content')!r}, "
+                        f"sender={message_data.get('sender')!r}"
+                    )
+                    await state.connection_manager.broadcast_to_room(room_id, message_data)
+                else:
+                    logger.warning("Message without room_id - ignoring")
 
-                    if room_id:
-                        logger.info(
-                            f"➡ Routing message to room_id={room_id}, "
-                            f"content={message_data.get('content')!r}, "
-                            f"sender={message_data.get('sender')!r}"
-                        )
-                        await state.connection_manager.broadcast_to_room(room_id, message_data)
-                    else:
-                        logger.warning("Message without room_id - ignoring")
+                await _sync_receiver.complete_message(msg)
 
-                    await receiver.complete_message(msg)
+            except Exception as e:
+                logger.error(f"Error processing individual message: {e}")
+                logger.error(traceback.format_exc())
+                await _sync_receiver.complete_message(msg)
 
-                except Exception as e:
-                    logger.error(f"Error processing individual message: {e}")
-                    logger.error(traceback.format_exc())
-                    await receiver.complete_message(msg)
-
-        except Exception as e:
-            logger.error(f"Service Bus receive loop error: {e}")
-            logger.error(traceback.format_exc())
+    except Exception as e:
+        logger.error(f"Service Bus receive loop error: {e}")
+        logger.error(traceback.format_exc())
 
 def publish_to_service_bus(message_data: dict):
     """
