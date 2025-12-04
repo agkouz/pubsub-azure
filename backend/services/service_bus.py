@@ -123,7 +123,7 @@ async def listen_to_service_bus():
        
     logger.info("Initializing receiver...")
 
-    with _sync_receiver as receiver:
+    async with _sync_receiver as receiver:
         logger.info(
             f"✓ Listening to Service Bus topic='{settings.TOPIC_NAME}', "
             f"subscription='{settings.SUBSCRIPTION_NAME}' (1 subscription, cost-optimal)"
