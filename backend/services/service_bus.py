@@ -90,7 +90,7 @@ async def listen_to_service_bus():
                         )
 
                         while True:
-                            logger.debug("Waiting for messages...")
+                            logger.info("Waiting for messages...")
                             try:
                                 messages = await receiver.receive_messages(
                                     max_message_count=10,
