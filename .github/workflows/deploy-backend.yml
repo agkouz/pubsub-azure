@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - feature/publish-via-websocket
+      - test-no-while
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'

@@ -61,7 +61,7 @@ from services.service_bus import listen_to_service_bus
 from services.redis_pub_sub import AsyncRedisPubSubService
 from api.routes import root, health, metrics, rooms, publish
 from api import websocket as websocket_module
-from services.service_bus import shutdown_sync_client
+from services.service_bus import  _init_sync_client, shutdown_sync_client
 
 # Configure logging first
 setup_logging()
@@ -105,6 +105,7 @@ async def startup_event():
         # Start subscriber in background
         asyncio.create_task(redis_service.listen("room:*"))    
     elif settings.PUB_SUB_SERVICE == "service_bus":
+        _init_sync_client()
         asyncio.create_task(listen_to_service_bus())
 
 @app.on_event("shutdown")
