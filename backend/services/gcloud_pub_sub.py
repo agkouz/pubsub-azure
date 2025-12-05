@@ -9,20 +9,24 @@ from typing import Callable, Awaitable, Optional
 from core import state
 from core.config import settings
 # ---------- CONFIG ----------
+try:
+    publisher = pubsub_v1.PublisherClient()
+    subscriber = pubsub_v1.SubscriberClient()
 
-publisher = pubsub_v1.PublisherClient()
-subscriber = pubsub_v1.SubscriberClient()
 
-PROJECT_ID = settings.PROJECT_ID
-TOPIC_ID = settings.TOPIC_ID
-SUBSCRIPTION_ID = settings.SUBSCRIPTION_ID
+    PROJECT_ID = settings.PROJECT_ID
+    TOPIC_ID = settings.TOPIC_ID
+    SUBSCRIPTION_ID = settings.SUBSCRIPTION_ID
 
-TOPIC_PATH = publisher.topic_path(PROJECT_ID, TOPIC_ID)
-SUBSCRIPTION_PATH = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION_ID)
+    TOPIC_PATH = publisher.topic_path(PROJECT_ID, TOPIC_ID)
+    SUBSCRIPTION_PATH = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION_ID)
 
-_streaming_future: Optional[pubsub_v1.subscriber.futures.StreamingPullFuture] = None
-_loop: Optional[asyncio.AbstractEventLoop] = None
-_on_event: Optional[Callable[[dict], Awaitable[None]]] = None
+    _streaming_future: Optional[pubsub_v1.subscriber.futures.StreamingPullFuture] = None
+    _loop: Optional[asyncio.AbstractEventLoop] = None
+    _on_event: Optional[Callable[[dict], Awaitable[None]]] = None
+except Exception as e:
+    print("Error initializing Pub/Sub clients. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+    pass
 
 async def on_pubsub_event(event: dict):
     # await print(event)

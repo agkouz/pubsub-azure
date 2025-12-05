@@ -1,50 +1,3 @@
-"""
-Azure Service Bus Dynamic Chatrooms - Cost-Optimal Implementation
-
-ARCHITECTURE OVERVIEW:
-======================
-This implementation uses a SINGLE Azure Service Bus subscription with backend routing
-to achieve cost-optimal scaling. This avoids the cost disaster of creating one 
-subscription per room, which would result in (messages × rooms) operations.
-
-COST MODEL:
-===========
-- Current: 2 operations per message (1 publish + 1 delivery to single subscription)
-- Alternative (per-room subs): (1 + N) operations per message, where N = number of rooms
-- Example: 100K messages/day, 1000 rooms
-  * Current: 200K ops/day = 6M/month = $0 (free tier)
-  * Alternative: 100M ops/day = 3B/month = $149/month ❌
-
-MESSAGE FLOW:
-=============
-1. User sends message to "Product Team" room
-2. Frontend: POST /publish with room_id="uuid-123"
-3. Backend: Publishes to Service Bus topic (1 operation)
-4. Service Bus: Delivers to single subscription (1 operation)
-5. Backend listener: Receives message, reads room_id
-6. Backend: Broadcasts ONLY to WebSockets subscribed to room_id="uuid-123"
-7. Users in other rooms: Never receive the message ✓
-
-KEY FEATURES:
-=============
-- Dynamic room creation by users
-- Room persistence (survives restarts via rooms.json)
-- Real-time WebSocket messaging
-- Perfect room isolation
-- Cost monitoring via /metrics endpoint
-- Scalable to 10K concurrent users (single instance)
-
-SCALING PATH:
-=============
-- 0-10K users: Current implementation (cost: $0-5/month)
-- 10K-100K users: Migrate to Redis Pub/Sub (cost: $46/month fixed)
-- 100K+ users: Migrate to Azure SignalR (cost: $489/month)
-
-See COST_ANALYSIS.md for complete cost breakdown and migration guides.
-
-Author: Alkis
-Version: 2.0 - Cost-Optimal Dynamic Chatrooms
-"""
 # backend/main.py
 
 from __future__ import annotations
@@ -126,25 +79,3 @@ if __name__ == "__main__":
 # ============================================================================
 # END OF FILE
 # ============================================================================
-"""
-SUMMARY:
-========
-This implementation achieves cost optimization by using a SINGLE Azure Service
-Bus subscription instead of creating one subscription per room. Messages are
-routed in the backend based on room_id, which costs 2 operations per message
-regardless of room count.
-
-For detailed cost analysis and scaling strategies, see:
-- COST_ANALYSIS.md (complete cost breakdown)
-- DEPLOYMENT_READY.md (deployment guide)
-- DYNAMIC_CHATROOMS_GUIDE.md (technical reference)
-
-To deploy:
-    git add backend/main.py backend/requirements.txt
-    git commit -m "Deploy cost-optimal dynamic chatrooms"
-    git push
-
-Author: Alkis
-Version: 2.0 - Cost-Optimal Dynamic Chatrooms
-Last Updated: 2025-12-01
-"""
