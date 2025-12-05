@@ -7,3 +7,4 @@ aiohttp==3.9.1
 python-dotenv==1.0.0
 pydantic==2.10.2
 redis
+google-cloud-pubsub==2.33.0
