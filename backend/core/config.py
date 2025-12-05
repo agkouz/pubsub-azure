@@ -23,6 +23,7 @@ class Settings:
     PUB_SUB_SERVICE: Literal["redis", "service_bus", "google_pub_sub"] =(os.getenv("PUB_SUB_SERVICE", "service_bus"))
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_ACCESS_KEY: str = os.getenv("REDIS_ACCESS_KEY", "")
     PROJECT_ID = os.getenv("PROJECT_ID", "")
     TOPIC_ID = os.getenv("TOPIC_ID", "")
     SUBSCRIPTION_ID = os.getenv("SUBSCRIPTION_ID", "")

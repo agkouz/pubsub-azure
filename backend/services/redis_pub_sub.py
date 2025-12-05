@@ -1,5 +1,6 @@
 # backend/services/redis_pub_sub.py - rewrite as async
 import redis.asyncio as redis
+from core.config import settings
 import json
 import logging
 
@@ -11,11 +12,12 @@ class AsyncRedisPubSubService:
         self.port = port
         self.client = None
         self.pubsub = None
+        self.access_key = settings.REDIS_ACCESS_KEY
 
     async def connect(self):
         """Establish async connection to Redis."""
-        self.client = await redis.from_url(
-            f"redis://{self.host}:{self.port}",
+        self.client = redis.from_url(
+            f"rediss://:{self.access_key}@{self.host}:{self.port}",
             decode_responses=True
         )
         await self.client.ping()
