@@ -21,6 +21,11 @@ class Settings:
     TOPIC_NAME: str = os.getenv("AZURE_SERVICEBUS_TOPIC_NAME", "backend-messages")
     SUBSCRIPTION_NAME: str = os.getenv("AZURE_SERVICEBUS_SUBSCRIPTION_NAME", "backend-subscription")
     PUB_SUB_SERVICE: Literal["redis", "service_bus", "google_pub_sub"] =(os.getenv("PUB_SUB_SERVICE", "service_bus"))
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    PROJECT_ID = os.getenv("PROJECT_ID", "")
+    TOPIC_ID = os.getenv("TOPIC_ID", "")
+    SUBSCRIPTION_ID = os.getenv("SUBSCRIPTION_ID", "")
 
     # For running locally, set this to false
     ENABLE_SERVICE_BUS: bool = os.getenv("ENABLE_SERVICE_BUS", "true").lower() == "true"

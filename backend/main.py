@@ -97,7 +97,7 @@ async def startup_event():
 
     if settings.PUB_SUB_SERVICE == "redis":
         # Start Redis listener in the background
-        redis_service = AsyncRedisPubSubService(host="localhost", port=6379) 
+        redis_service = AsyncRedisPubSubService(host=settings.REDIS_HOST, port=settings.REDIS_PORT) 
         await redis_service.connect()
         
         # Store globally

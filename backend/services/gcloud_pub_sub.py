@@ -7,15 +7,15 @@ from google.cloud import pubsub_v1
 from typing import Callable, Awaitable, Optional
 
 from core import state
-
+from core.config import settings
 # ---------- CONFIG ----------
-load_dotenv()
-PROJECT_ID = os.environ["PROJECT_ID"]
-TOPIC_ID = os.environ["TOPIC_ID"]
-SUBSCRIPTION_ID = os.environ["SUBSCRIPTION_ID"]
 
 publisher = pubsub_v1.PublisherClient()
 subscriber = pubsub_v1.SubscriberClient()
+
+PROJECT_ID = settings.PROJECT_ID
+TOPIC_ID = settings.TOPIC_ID
+SUBSCRIPTION_ID = settings.SUBSCRIPTION_ID
 
 TOPIC_PATH = publisher.topic_path(PROJECT_ID, TOPIC_ID)
 SUBSCRIPTION_PATH = subscriber.subscription_path(PROJECT_ID, SUBSCRIPTION_ID)
