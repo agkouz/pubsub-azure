@@ -12,7 +12,7 @@ from core.config import settings
 from core.logging import setup_logging, get_logger
 from services.service_bus import listen_to_service_bus
 from services.redis_pub_sub import AsyncRedisPubSubService
-from api.routes import root, health, metrics, rooms, publish
+from api.routes import root, health, metrics, rooms
 from api import websocket as websocket_module
 from services.service_bus import shutdown_sync_client
 from services.gcloud_pub_sub import shutdown_pubsub, init_pubsub
