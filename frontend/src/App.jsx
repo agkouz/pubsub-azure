@@ -1,33 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
-import './App.css';
+import React, { useState, useEffect, useRef } from "react";
+import "./App.css";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
-const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8000/ws';
-const SUBSCRIPTION_KEY = process.env.REACT_APP_APIM_SUBSCRIPTION_KEY || '';
-console.log(BACKEND_URL)
-console.log(WS_URL)
-console.log(SUBSCRIPTION_KEY)
+const BACKEND_URL = import.meta.env.VITE_API_KEY || "http://localhost:8000";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws";
+const SUBSCRIPTION_KEY = import.meta.env.VITE_APIM_SUBSCRIPTION_KEY || "";
+
+console.log(BACKEND_URL);
+console.log(WS_URL);
+console.log(SUBSCRIPTION_KEY);
+
 function App() {
   const [messages, setMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [inputMessage, setInputMessage] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("Disconnected");
   const [currentRoom, setCurrentRoom] = useState(null);
   const [rooms, setRooms] = useState([]);
   const [joinedRooms, setJoinedRooms] = useState(new Set());
-  const [username, setUsername] = useState('User' + Math.floor(Math.random() * 1000));
-  
+  const [username, setUsername] = useState(
+    "User" + Math.floor(Math.random() * 1000)
+  );
+
   // Room creation modal
   const [showCreateRoom, setShowCreateRoom] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomDescription, setNewRoomDescription] = useState('');
-  
+  const [newRoomName, setNewRoomName] = useState("");
+  const [newRoomDescription, setNewRoomDescription] = useState("");
+
   const ws = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     loadRooms();
     connectWebSocket();
-    
+
     return () => {
       if (ws.current) {
         ws.current.close();
@@ -36,27 +40,27 @@ function App() {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const loadRooms = async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/rooms`, {
         headers: {
-          'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY
-        }
+          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
+        },
       });
       const data = await response.json();
       setRooms(data);
-      
+
       // Auto-select first room if none selected
       if (data.length > 0 && !currentRoom) {
         const firstRoom = data[0];
         setCurrentRoom(firstRoom);
       }
     } catch (error) {
-      console.error('Failed to load rooms:', error);
-      addSystemMessage('Failed to load rooms', 'error');
+      console.error("Failed to load rooms:", error);
+      addSystemMessage("Failed to load rooms", "error");
     }
   };
 
@@ -64,183 +68,198 @@ function App() {
     ws.current = new WebSocket(`${WS_URL}?user_id=${username}`);
 
     ws.current.onopen = () => {
-      console.log('WebSocket connected');
-      setConnectionStatus('Connected');
+      console.log("WebSocket connected");
+      setConnectionStatus("Connected");
       addSystemMessage(`Connected as ${username}`);
     };
 
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
-        if (data.type === 'room_joined') {
+
+        if (data.type === "room_joined") {
           addSystemMessage(`✓ Joined: ${data.room.name}`);
-          setJoinedRooms(prev => new Set([...prev, data.room.id]));
-        } else if (data.type === 'room_left') {
+          setJoinedRooms((prev) => new Set([...prev, data.room.id]));
+        } else if (data.type === "room_left") {
           addSystemMessage(`✓ Left room`);
-          setJoinedRooms(prev => {
+          setJoinedRooms((prev) => {
             const newSet = new Set(prev);
             newSet.delete(data.room_id);
             return newSet;
           });
-        } else if (data.type === 'rooms_updated') {
+        } else if (data.type === "rooms_updated") {
           // Room list changed, reload
           setRooms(data.rooms);
-          addSystemMessage('Room list updated');
-        } else if (data.type === 'rooms_list') {
+          addSystemMessage("Room list updated");
+        } else if (data.type === "rooms_list") {
           setRooms(data.rooms);
-        } else if (data.type === 'error') {
-          addSystemMessage(`Error: ${data.message}`, 'error');
+        } else if (data.type === "error") {
+          addSystemMessage(`Error: ${data.message}`, "error");
         } else if (data.content) {
           // Regular message
           addMessage(data.content, data.sender, data.room_id, data.room_name);
-        } else if (data.type === "message_publish" && data.status === "success") {
+        } else if (
+          data.type === "message_publish" &&
+          data.status === "success"
+        ) {
           // Optional: confirm message delivered
           addSystemMessage("Server acknowledged message.");
         }
       } catch (error) {
-        console.error('Error parsing message:', error);
+        console.error("Error parsing message:", error);
       }
     };
 
     ws.current.onclose = () => {
-      console.log('WebSocket disconnected');
-      setConnectionStatus('Disconnected');
-      addSystemMessage('Disconnected', 'error');
+      console.log("WebSocket disconnected");
+      setConnectionStatus("Disconnected");
+      addSystemMessage("Disconnected", "error");
       setJoinedRooms(new Set());
-      
+
       setTimeout(() => {
         if (ws.current?.readyState === WebSocket.CLOSED) {
-          addSystemMessage('Reconnecting...');
+          addSystemMessage("Reconnecting...");
           connectWebSocket();
         }
       }, 3000);
     };
 
     ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setConnectionStatus('Error');
+      console.error("WebSocket error:", error);
+      setConnectionStatus("Error");
     };
   };
 
   const joinRoom = (roomId) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
-        action: 'join',
-        room_id: roomId
-      }));
+      ws.current.send(
+        JSON.stringify({
+          action: "join",
+          room_id: roomId,
+        })
+      );
     }
   };
 
   const leaveRoom = (roomId) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
-        action: 'leave',
-        room_id: roomId
-      }));
+      ws.current.send(
+        JSON.stringify({
+          action: "leave",
+          room_id: roomId,
+        })
+      );
     }
   };
 
   const createRoom = async () => {
     if (!newRoomName.trim()) {
-      alert('Room name is required');
+      alert("Room name is required");
       return;
     }
 
     try {
       const response = await fetch(`${BACKEND_URL}/rooms`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY
+          "Content-Type": "application/json",
+          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
         },
         body: JSON.stringify({
           name: newRoomName,
           description: newRoomDescription,
-          created_by: username
-        })
+          created_by: username,
+        }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || 'Failed to create room');
+        throw new Error(error.detail || "Failed to create room");
       }
 
       const newRoom = await response.json();
       addSystemMessage(`✓ Created room: ${newRoom.name}`);
-      
+
       // Close modal and reset
       setShowCreateRoom(false);
-      setNewRoomName('');
-      setNewRoomDescription('');
-      
+      setNewRoomName("");
+      setNewRoomDescription("");
+
       // Reload rooms
       await loadRooms();
-      
+
       // Auto-join the new room
       setCurrentRoom(newRoom);
       joinRoom(newRoom.id);
-      
     } catch (error) {
-      console.error('Failed to create room:', error);
+      console.error("Failed to create room:", error);
       alert(error.message);
     }
   };
 
   const deleteRoom = async (roomId) => {
-    if (!window.confirm('Are you sure you want to delete this room?')) {
+    if (!window.confirm("Are you sure you want to delete this room?")) {
       return;
     }
 
     try {
       const response = await fetch(`${BACKEND_URL}/rooms/${roomId}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: {
-          'Ocp-Apim-Subscription-Key': SUBSCRIPTION_KEY
-        }
+          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
+        },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete room');
+        throw new Error("Failed to delete room");
       }
 
-      addSystemMessage('Room deleted');
+      addSystemMessage("Room deleted");
       await loadRooms();
-      
+
       if (currentRoom?.id === roomId) {
         setCurrentRoom(rooms[0] || null);
       }
     } catch (error) {
-      console.error('Failed to delete room:', error);
-      alert('Failed to delete room');
+      console.error("Failed to delete room:", error);
+      alert("Failed to delete room");
     }
   };
 
   const addMessage = (content, sender, roomId, roomName) => {
     const timestamp = new Date().toLocaleTimeString();
-    setMessages(prev => [...prev, { 
-      content, 
-      sender, 
-      timestamp, 
-      roomId,
-      roomName,
-      type: 'message'
-    }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        content,
+        sender,
+        timestamp,
+        roomId,
+        roomName,
+        type: "message",
+      },
+    ]);
   };
 
-  const addSystemMessage = (content, type = 'system') => {
+  const addSystemMessage = (content, type = "system") => {
     const timestamp = new Date().toLocaleTimeString();
-    setMessages(prev => [...prev, { 
-      content, 
-      timestamp, 
-      type 
-    }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        content,
+        timestamp,
+        type,
+      },
+    ]);
   };
 
   const sendMessage = () => {
     if (!inputMessage.trim() || !currentRoom || !ws.current) return;
     if (ws.current.readyState !== WebSocket.OPEN) {
-      addSystemMessage("WebSocket is not connected. Message not sent.", "error");
+      addSystemMessage(
+        "WebSocket is not connected. Message not sent.",
+        "error"
+      );
       return;
     }
 
@@ -256,13 +275,12 @@ function App() {
         })
       );
 
-      setInputMessage('');
+      setInputMessage("");
     } catch (error) {
       console.error("WebSocket send error:", error);
       addSystemMessage(`Failed to send: ${error.message}`, "error");
     }
   };
-
 
   const selectRoom = (room) => {
     setCurrentRoom(room);
@@ -272,18 +290,31 @@ function App() {
   };
 
   // Filter messages for current room
-  const filteredMessages = currentRoom 
-    ? messages.filter(msg => 
-        msg.type !== 'message' || msg.roomId === currentRoom.id
+  const filteredMessages = currentRoom
+    ? messages.filter(
+        (msg) => msg.type !== "message" || msg.roomId === currentRoom.id
       )
-    : messages.filter(msg => msg.type !== 'message');
+    : messages.filter((msg) => msg.type !== "message");
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-left">
           <h1>💬 Dynamic Chatrooms</h1>
-          <span className="username-badge">@{username}</span>
+          {/* <input
+            id="user-id"
+            type="text"
+            // disabled={isConnected}
+            className="username-badge"
+            placeholder="enter user ID..."
+            onChange={(e) => setUsername(e.target.value)}
+          /> */}
+          {/*!username && (
+            <button onClick={createRoom} className="btn-primary">
+              Connect
+            </button>
+          )*/}
+          {username && <span className="username-badge">@{username}</span>}
         </div>
         <div className={`connection-status ${connectionStatus.toLowerCase()}`}>
           {connectionStatus}
@@ -295,16 +326,22 @@ function App() {
         <div className="sidebar">
           <div className="rooms-header">
             <h3>Rooms ({rooms.length})</h3>
-            <button onClick={() => setShowCreateRoom(true)} className="btn-create" title="Create new room">
+            <button
+              onClick={() => setShowCreateRoom(true)}
+              className="btn-create"
+              title="Create new room"
+            >
               ➕
             </button>
           </div>
-          
+
           <div className="rooms-list">
-            {rooms.map(room => (
-              <div 
+            {rooms.map((room) => (
+              <div
                 key={room.id}
-                className={`room-item ${currentRoom?.id === room.id ? 'active' : ''} ${joinedRooms.has(room.id) ? 'joined' : ''}`}
+                className={`room-item ${
+                  currentRoom?.id === room.id ? "active" : ""
+                } ${joinedRooms.has(room.id) ? "joined" : ""}`}
               >
                 <div onClick={() => selectRoom(room)} className="room-info">
                   <div className="room-name-row">
@@ -320,16 +357,22 @@ function App() {
                 </div>
                 <div className="room-actions">
                   {joinedRooms.has(room.id) ? (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); leaveRoom(room.id); }}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        leaveRoom(room.id);
+                      }}
                       className="btn-toggle joined"
                       title="Leave room"
                     >
                       ✓
                     </button>
                   ) : (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); joinRoom(room.id); }}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        joinRoom(room.id);
+                      }}
                       className="btn-toggle"
                       title="Join room"
                     >
@@ -337,8 +380,11 @@ function App() {
                     </button>
                   )}
                   {room.created_by === username && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); deleteRoom(room.id); }}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteRoom(room.id);
+                      }}
                       className="btn-delete"
                       title="Delete room"
                     >
@@ -359,7 +405,9 @@ function App() {
                 <div>
                   <h2>#{currentRoom.name}</h2>
                   {currentRoom.description && (
-                    <p className="room-description">{currentRoom.description}</p>
+                    <p className="room-description">
+                      {currentRoom.description}
+                    </p>
                   )}
                 </div>
                 {!joinedRooms.has(currentRoom.id) && (
@@ -371,13 +419,16 @@ function App() {
 
               <div className="messages-container">
                 {filteredMessages.map((msg, index) => (
-                  <div 
-                    key={index} 
-                    className={`message ${msg.type || 'message'} ${msg.sender === username ? 'own-message' : ''}`}
+                  <div
+                    key={index}
+                    className={`message ${msg.type || "message"} ${
+                      msg.sender === username ? "own-message" : ""
+                    }`}
                   >
-                    {msg.type === 'system' || msg.type === 'error' ? (
+                    {msg.type === "system" || msg.type === "error" ? (
                       <div className="system-message">
-                        <span className="timestamp">[{msg.timestamp}]</span> {msg.content}
+                        <span className="timestamp">[{msg.timestamp}]</span>{" "}
+                        {msg.content}
                       </div>
                     ) : (
                       <>
@@ -398,11 +449,11 @@ function App() {
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                  onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                   placeholder={`Message #${currentRoom.name}...`}
                   disabled={!joinedRooms.has(currentRoom.id)}
                 />
-                <button 
+                <button
                   onClick={sendMessage}
                   disabled={!joinedRooms.has(currentRoom.id)}
                 >
@@ -414,7 +465,10 @@ function App() {
             <div className="no-room-selected">
               <h2>👋 Welcome!</h2>
               <p>Select or create a room to start chatting</p>
-              <button onClick={() => setShowCreateRoom(true)} className="btn-create-large">
+              <button
+                onClick={() => setShowCreateRoom(true)}
+                className="btn-create-large"
+              >
                 ➕ Create Your First Room
               </button>
             </div>
@@ -449,7 +503,10 @@ function App() {
               />
             </div>
             <div className="modal-actions">
-              <button onClick={() => setShowCreateRoom(false)} className="btn-cancel">
+              <button
+                onClick={() => setShowCreateRoom(false)}
+                className="btn-cancel"
+              >
                 Cancel
               </button>
               <button onClick={createRoom} className="btn-primary">
