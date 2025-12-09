@@ -38,7 +38,6 @@ app.include_router(root.router)
 app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(rooms.router)
-app.include_router(publish.router)
 
 # WebSocket routes
 app.include_router(websocket_module.router)
