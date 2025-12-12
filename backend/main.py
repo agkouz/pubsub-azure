@@ -10,11 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.logging import setup_logging, get_logger
-from services.service_bus import listen_to_service_bus
 from services.redis_pub_sub import AsyncRedisPubSubService
 from api.routes import root, health, metrics, rooms
 from api import websocket as websocket_module
-from services.service_bus import shutdown_sync_client
 from services.gcloud_pub_sub import shutdown_pubsub, init_pubsub
 
 # Configure logging first
@@ -57,17 +55,13 @@ async def startup_event():
 
         # Start subscriber in background
         asyncio.create_task(redis_service.listen("room:*"))    
-    elif settings.PUB_SUB_SERVICE == "service_bus":
-        asyncio.create_task(listen_to_service_bus())
     elif settings.PUB_SUB_SERVICE == "google_pub_sub":
         loop = asyncio.get_running_loop()
         init_pubsub(loop)
 
 @app.on_event("shutdown")
 async def on_shutdown():
-    if settings.PUB_SUB_SERVICE == "service_bus":
-        shutdown_sync_client()
-    elif settings.PUB_SUB_SERVICE == "google_pub_sub":
+    if settings.PUB_SUB_SERVICE == "google_pub_sub":
         shutdown_pubsub()
 
 

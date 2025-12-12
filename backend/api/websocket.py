@@ -8,7 +8,6 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from services.service_bus import publish_to_service_bus
 from services.gcloud_pub_sub import publish_event
 from core import state
 from core.config import settings
@@ -152,35 +151,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                         await state.redis_service.broadcast_to_room(room.id, message_data)
                         state.message_counter += 1
                         await websocket.send_json({"type": "message_publish", "status": "success"})
-                    elif settings.PUB_SUB_SERVICE == "service_bus":
-                        data = message.get('data')
-                        room = state.room_manager.get_room(data['room_id'])
-                        
-                        if not room:
-                            await websocket.send_json({"type": "message_publish", "error": "Room not found"})
-                        
-                        message_data = {
-                            "room_id":  room.id,
-                            "room_name": room.name,
-                            "content": data['content'],
-                            "sender": data['sender'],
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                        print(f"ENABLE SERVICE BUS IS {settings.ENABLE_SERVICE_BUS}!!!")
-                        # local mode: bypass Service Bus and just broadcast directly
-                        if not settings.ENABLE_SERVICE_BUS:
-                            # simulate what the listener would do
-                            await state.connection_manager.broadcast_to_room(data['room_id'], message_data)
-                            state.message_counter += 1
-                            await websocket.send_json({"type": "message_publish", "status": "success"})
-                            return
-                    
-                        try:
-                            publish_to_service_bus(message_data)
-                            state.message_counter += 1
-                            await websocket.send_json({"type": "message_publish", "status": "success"})
-                        except Exception as e:
-                            await websocket.send_json({"type": "message_publish", "error": f"Internal Error: {str(e)}"})
                     elif settings.PUB_SUB_SERVICE == "google_pub_sub":
                         data = message.get('data')
                         room = state.room_manager.get_room(data['room_id'])
@@ -195,15 +165,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str = "anonymous"):
                             "sender": data['sender'],
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
-                        # local mode: bypass Service Bus and just broadcast directly
-                        if not settings.ENABLE_SERVICE_BUS:
-                            print(f"ENABLE_SERVICE_BUS: {settings.ENABLE_SERVICE_BUS}, broadcasting directly.")
-
-                            # simulate what the listener would do
-                            await state.connection_manager.broadcast_to_room(data['room_id'], message_data)
-                            state.message_counter += 1
-                            await websocket.send_json({"type": "message_publish", "status": "success"})
-                            return
                     
                         try:
                             publish_event(message_data)
