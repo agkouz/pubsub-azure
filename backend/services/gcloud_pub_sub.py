@@ -25,7 +25,7 @@ try:
     _loop: Optional[asyncio.AbstractEventLoop] = None
     _on_event: Optional[Callable[[dict], Awaitable[None]]] = None
 except Exception as e:
-    print("Error initializing Pub/Sub clients. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+    print("Error initializing Pub/Sub clients. Make sure ADC or a Service Account is set.")
     pass
 
 async def on_pubsub_event(event: dict):
