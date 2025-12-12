@@ -3,11 +3,9 @@ import "./App.css";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws";
-const SUBSCRIPTION_KEY = import.meta.env.VITE_APIM_SUBSCRIPTION_KEY || "";
 
 console.log(BACKEND_URL);
 console.log(WS_URL);
-console.log(SUBSCRIPTION_KEY);
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -45,11 +43,7 @@ function App() {
 
   const loadRooms = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/rooms`, {
-        headers: {
-          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
-        },
-      });
+      const response = await fetch(`${BACKEND_URL}/rooms`);
       const data = await response.json();
       setRooms(data);
 
@@ -103,7 +97,7 @@ function App() {
           data.status === "success"
         ) {
           // Optional: confirm message delivered
-          addSystemMessage("Server acknowledged message.");
+          console.log("Server acknowledged message.");
         }
       } catch (error) {
         console.error("Error parsing message:", error);
@@ -118,7 +112,7 @@ function App() {
 
       setTimeout(() => {
         if (ws.current?.readyState === WebSocket.CLOSED) {
-          addSystemMessage("Reconnecting...");
+          console.log("Reconnecting...");
           connectWebSocket();
         }
       }, 3000);
@@ -163,7 +157,6 @@ function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
         },
         body: JSON.stringify({
           name: newRoomName,
@@ -205,9 +198,6 @@ function App() {
     try {
       const response = await fetch(`${BACKEND_URL}/rooms/${roomId}`, {
         method: "DELETE",
-        headers: {
-          "Ocp-Apim-Subscription-Key": SUBSCRIPTION_KEY,
-        },
       });
 
       if (!response.ok) {
